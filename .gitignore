@@ -1,5 +1,28 @@
-node_modules/
+# --- secrets: never commit ---
+.env
+.env.*
+!.env.example
+.dev.vars              # Cloudflare Workers local secrets
+.dev.vars.*
+*.pem
+*.key
+*.p8                   # Apple auth keys, if MusicKit is ever enabled
+*.p12
+secrets.json
+**/credentials.json
+
+# --- personal data ---
+# Listening history is a record of what Mason actually plays. Keep it local.
 data/history.json
-.dev.vars
+data/*.local.json
+
+# --- build / tooling ---
+node_modules/
 .wrangler/
+dist/
 *.log
+.DS_Store
+
+# --- scratch ---
+tmp/
+scratch/

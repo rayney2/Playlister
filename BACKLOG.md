@@ -27,18 +27,26 @@ has a clear "done" condition.
    attributes every pick; states no fact absent from the source text.
    *Done when:* a run prints a guide whose every claim traces to a blurb.
 
+5. **Add Deezer enrichment** (free, no key). Per resolved track: fetch ISRC and
+   `rank`. Store the ISRC as the durable history key, and use agreement between
+   Deezer and iTunes as a match-confidence signal.
+   *Done when:* every track in a run carries an ISRC, history is keyed by it, and
+   the resolver reports when its two sources disagree.
+
 ## Parking lot
 
 Ideas, not commitments. Nothing here is scheduled. Promote to the backlog only
 with a "done when".
 
-- Probe more structured play-log sources in KEXP's shape: Spinitron's public API
-  (many US stations), NTS, WFMU, BBC 6 Music. Cheapest path to source diversity
-  and it needs no LLM.
+- More structured play logs. Probed 2026-09-29: NTS exposes shows but not
+  tracklists; Spinitron needs a per-station token; WFMU and Hype Machine RSS are
+  dead. BBC 6 Music still unprobed. See NOTES.md before re-investigating.
+- ListenBrainz `fresh-releases` as a new-release source (free, no key, works).
 - Backend LLM extraction from article text, to unlock Pitchfork / Bandcamp Daily
   / The Quietus as real sources (see ADR-004).
-- Popularity buckets: ~40% well-known / 40% mid-tail / 20% wildcard, using
-  Last.fm listener counts as the popularity proxy.
+- Popularity buckets: ~40% well-known / 40% mid-tail / 20% wildcard. Use
+  Deezer's `rank` (free, no key) rather than Last.fm listener counts, and Apple's
+  own marketing RSS for the "genuinely popular" end.
 - Graph-based adjacent picks (~20% of the list): Last.fm `artist.getSimilar`,
   ListenBrainz, MusicBrainz.
 - Genre/history context for richer stories: Wikipedia genre pages, Discogs (free
