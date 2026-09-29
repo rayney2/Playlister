@@ -49,6 +49,45 @@ two-step window composition and the end-boundary fix (see NOTES.md).
 **Label honestly: narrow.** Indie and experimental electronic. Excellent quality,
 one corridor of taste. Needs a hard cap or it drowns everything else.
 
+### BBC — seven stations from one API pattern
+`access: free` · `status: working` · `curation: human-dj` · `story: no` ·
+`era: current` · `volume: med` · `resolve_risk: low`
+
+`rms.api.bbc.co.uk/v2/services/<service_id>/segments/latest?limit=N`
+
+The single widest genre unlock found. Seven services verified returning real
+track data, no key:
+
+| service_id | covers | verified sample |
+|---|---|---|
+| `bbc_6music` | eclectic / alternative | This Is Lorelei, Lime Garden, Marika Hackman |
+| `bbc_radio_one` | pop / new | Blossoms & Declan McKenna |
+| `bbc_radio_two` | adult / classic | Stevie Wonder, Erasure, Texas |
+| `bbc_radio_three` | **classical** | Arnold Bax, William Byrd, Emilie Mayer |
+| `bbc_1xtra` | hip hop / R&B / dancehall | Busta Rhymes, Ezra Collective |
+| `bbc_asian_network` | **South Asian** | Shankar Mahadevan, Shaan & KK |
+| `bbc_radio_nan_gaidheal` | Gaelic / mixed | varies widely |
+
+**Field mapping is counterintuitive and matters:** `titles.primary` is the
+**artist**, `titles.secondary` is the **track title** — the reverse of what the
+names suggest. Getting this backwards silently produces garbage candidates.
+
+`bbc_radio_scotland` returns 400. `bbc_world_service` returns an empty set. The
+older `/v2/broadcasts/latest` endpoint gives programme slots, not tracks — the
+`segments` path is the one that carries songs.
+
+### Deezer editorial playlists
+`access: free` · `status: working` · `curation: human-critic` · `story: no` ·
+`era: current` · `volume: 50-180/playlist` · `resolve_risk: low`
+
+`api.deezer.com/editorial/0/charts` lists staff playlists; then
+`api.deezer.com/playlist/<id>/tracks`. Verified: "bedroom rave" (50), "New Folk"
+(180), "Soul Coffee" (70), "Reggaeton Classics" (73).
+
+Genuinely themed human curation rather than raw charts. Same localisation trap as
+the rest of Deezer (Khruangbin returns as クルアンビン), so never match on its
+artist string.
+
 ### SomaFM
 `access: free` · `status: working` · `curation: human-dj` · `story: no` ·
 `era: current` · `volume: 18/channel` · `resolve_risk: med`
@@ -74,6 +113,35 @@ CDATA-wrapped.
   only classical source found.
 
 A different country's taste, which is breadth we can't get from US stations.
+
+---
+
+## Genre labelling: already solved, free
+
+**iTunes returns `primaryGenreName` in the search call the resolver already
+makes.** No new integration, no extra request. Verified granularity, which is
+exactly the "broad, not too precise" level wanted:
+
+`Hip-Hop/Rap` · `Jazz` · `Metal` · `Reggae` · `Classical` · `Indie Pop` ·
+`Rock y Alternativo`
+
+The same response also carries `releaseDate`, which gives era bucketing for free
+(ADR-006).
+
+Two notes:
+
+1. A few labels need collapsing into broader buckets — `Indie Pop` and
+   `Rock y Alternativo` are narrower or more localised than the rest. A small
+   hand-written mapping table from iTunes genre to about a dozen broad buckets is
+   the whole job.
+2. For comparison, MusicBrainz's genre vocabulary has **2,209** entries. Far too
+   precise to group a playlist by, which confirms staying broad.
+
+**Use both labels, for different jobs.** The *source* label (SomaFM's channel is
+"ambient", BBC Radio 3 is "classical") decides where to go looking. The *track*
+label from iTunes says what actually arrived. When the two disagree, that is a
+signal worth logging: it means either the source drifted from its label or the
+resolver matched the wrong song.
 
 ---
 
@@ -188,6 +256,12 @@ Recorded so nobody re-investigates.
 |---|---|
 | **Bandcamp API** | Does not exist. Both unofficial autocomplete endpoints return `{error}`. KEXP DJ comments already contain Bandcamp artist links, which is the useful part. |
 | **Mixcloud** | `sections` (the tracklist field) is **always empty** on the public API — verified across NTS, Rinse FM and jazz mixes. Gives show names and tags only. |
+| **Audius** | Works (`discoveryprovider.audius.co`, free, has a `genre` field) but content is self-uploaded amateur electronic/dubstep. `resolve_risk: high` — almost none of it is on Apple Music. |
+| **Airnet / 3RRR / PBS FM** | Program lists work (243 and 220 programs) but `slug` is null and the episodes endpoint 500s. No route to tracklists. |
+| **Record shop charts** (Boomkat, Rough Trade, Norman) | 403 to requests. Piccadilly Records and Phonica return HTML that would need scraping. Staff picks would be excellent obscure curation if reachable. |
+| **College radio** (BFF.fm, KALX, KUTX, WFUV, Radio K, WXYC) | 404s, dead endpoints or SSL failures. CHIRP returns a tiny widget. WPRB gives blog posts only. |
+| **CBC, NPO 3FM, ByteFM, RNZ** | 403/404. |
+| **TheAudioDB, Every Noise at Once, SecondHandSongs** | 404 or 403. |
 | **NTS** | Episodes expose `genres`, `moods`, `intensity` but `tracklist: {}`. No tracks without scraping. |
 | **Spinitron** | Per-station token required (401). Many US stations use it, so worth revisiting if a token is ever obtained. |
 | **Acclaimed Music** | 403 to all requests. Would be ideal (thousands of critic-list songs); blocked. |
