@@ -127,3 +127,36 @@ can be got wrong.
 
 **Open:** what the budget should be. A starting guess is recent / last decade /
 older, but it should be a parameter, not a constant, until it's been listened to.
+
+---
+
+## ADR-007 — Label every source, then fill quotas from it
+**2026-09-29 · accepted**
+
+Stop treating sources as one undifferentiated pool. Each source declares what it
+covers, and the pipeline fills a target shape from those declarations rather than
+concatenating whatever arrives.
+
+Each source carries at least: curation type (human / algorithmic), genre coverage,
+era coverage, expected volume, and whether it supplies story material. KEXP's main
+rotation is labelled honestly as one narrow corridor — indie and experimental
+electronic — not as a general-purpose source.
+
+The pipeline then enforces caps: no single source above a set share, and a target
+spread across genres and eras.
+
+**Alternatives:** (a) keep concatenating and hope more sources balance it out —
+this is what produced a run that was 94% one station; (b) weight sources by a
+single quality score, which cannot express "excellent, but only for one genre".
+
+**Why:** volume from one source is not breadth. The stated goal is music Mason
+doesn't know across all kinds of music, and a source's *shape* is as important as
+its quality. A cap is also the only thing that makes adding a small,
+high-quality source worthwhile — otherwise six good tracks drown in ninety.
+
+**Cost:** more bookkeeping, and quotas can starve the playlist when sources fail.
+Needs a defined fallback when a genre's quota can't be filled. The labels are also
+hand-written claims about each source, so they can drift from reality.
+
+**Open:** the target shape itself. Genre spread, era spread and the per-source cap
+should all be parameters, not constants, until Mason has listened to a few runs.

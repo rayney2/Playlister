@@ -150,3 +150,77 @@ the same DJ-comment grounding. Comments thin out before ~2015.
 Note `offset` does NOT paginate backwards in time usefully — `offset=20000`
 returned plays from 2026-08-09 and `offset=200000` from 2025-05-03, so the
 ordering isn't a clean reverse chronology at depth. Use the date filters.
+
+## Breadth of sound: what each source actually covers (2026-09-29)
+
+The problem: KEXP supplied 93 of 99 candidates, and KEXP's main rotation is one
+corridor of taste — indie and experimental electronic. A run full of DJ Python,
+Andy Stott, Fennesz and Oneohtrix Point Never is not "diverse", it is one station's
+house style. Volume from one source is not breadth.
+
+So every source needs a **label** describing what kind of music it yields, and the
+pipeline needs quotas. Measured coverage:
+
+| source | curation | genre coverage | era | volume | verified |
+|---|---|---|---|---|---|
+| KEXP main rotation | human (DJ + comment) | narrow: indie / experimental electronic | recent | high (~93/pull) | yes |
+| KEXP genre programs | human (DJ + comment) | **broad**: hip-hop, Latin, reggae, metal, jazz, blues, Afrobeat, rockabilly, world | any (archive to 2001) | medium | partly — see caveat |
+| Deezer genre charts | algorithmic (popularity) | broad: 28 genres | current only | high | yes |
+| Wikipedia critic lists | human (canon) | classic rock, soul, some hip-hop | historical | **thin (~20 songs)** | yes |
+| Stereogum | human (critic) | indie rock | recent | very low (6/40) | yes |
+
+### KEXP genre programs — best option, one bug to fix
+
+41 programs, each genre-tagged. Street Sounds (Hip Hop), El Sonido (Latin),
+Positive Vibrations (Reggae), Seek & Destroy (Metal), Jazz Theatre, Shake the
+Shack (Rockabilly), Overnight Afrobeats, Mo'Glo (World), Best Ambiance (African).
+
+This is the only source that gives **both** breadth and human context.
+
+Two API facts, both important:
+
+1. **KEXP silently ignores query params it doesn't recognise.** `?program=12` and
+   `?show=67921` return the latest plays regardless. No error, no warning. Every
+   program I requested returned the identical three songs. Only `limit`, `offset`,
+   `airdate_after` and `airdate_before` actually filter.
+2. **So genre targeting must be composed**: list shows, find an episode of the
+   program you want, read its `start_time`, then pull plays inside that window
+   with the date filters.
+
+Verified working — real output from time-windowed pulls:
+
+- **El Sonido** → Café Tacvba, Caifanes, Wyyrd (Latin rock, with detailed
+  Spanish-language DJ context)
+- **Street Sounds** → Wreckx-N-Effect, MC Hammer, Rob Base, Kid 'n Play
+- **Jazz Theatre** → Greg Foat, Cleo Sol, Brainstory
+- **Positive Vibrations** → The Congos, Alice Coltrane
+
+**Known bug in my approach:** I assumed every episode runs three hours. For Seek &
+Destroy (Metal) that window returned LCD Soundsystem and Beck — it overshot into
+the next program. Use the *next* show's `start_time` as the end boundary instead
+of a fixed duration.
+
+### Wikipedia gives canon, but only excerpts
+
+`en.wikipedia.org/api/rest_v1/page/html/<title>` returns clean HTML with parseable
+tables, no key. From "Rolling Stone's 500 Greatest Songs of All Time" I extracted
+20 ranked entries: Dylan, The Rolling Stones, Aretha, Chuck Berry, The Beatles,
+Outkast, Fleetwood Mac, Missy Elliott.
+
+But it is **20, not 500** — Wikipedia publishes the top ten of each edition, not
+the full list, presumably for copyright reasons. "500 Greatest Albums" yielded 1
+row. So Wikipedia is a source of a few dozen canonical anchors, not a deep pool.
+
+Scraping rollingstone.com directly is a poor substitute: paywalled, JavaScript
+rendered, and prose rather than tables (same problem as ADR-004).
+
+### Deezer genre charts: breadth without curation
+
+`api.deezer.com/genre` lists 28 genres; `api.deezer.com/chart/{id}/tracks` returns
+each one's chart. Free, no key. Rock → Bruce Springsteen. Rap/Hip Hop → Drake.
+Reggaeton → Omar Courtz.
+
+Caveat: these are **current popularity charts, not curation**, and genres overlap
+(Tame Impala appeared in All, Dance and Alternative). Good for the "genuinely
+popular" bucket. No human wrote a reason for any of these picks, so they bring no
+story material.

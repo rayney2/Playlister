@@ -39,6 +39,18 @@ has a clear "done" condition.
    *Done when:* a single run contains picks from at least three different
    decades, and the budget is a parameter rather than a constant.
 
+7. **Fix the KEXP genre-program window, then sample genres** (ADR-007). Compose
+   shows -> episode start_time -> date-filtered plays. Use the next show's
+   start_time as the end boundary; a fixed 3-hour window overshoots into the
+   following program.
+   *Done when:* one run contains picks from at least four genre programs, and a
+   metal episode returns metal.
+
+8. **Source registry with labels and quotas** (ADR-007). Declare coverage per
+   source; cap any one source's share; target a genre and era spread.
+   *Done when:* no source exceeds its cap in a run, and the funnel output reports
+   the genre/era spread achieved versus targeted.
+
 ## Parking lot
 
 Ideas, not commitments. Nothing here is scheduled. Promote to the backlog only
@@ -48,6 +60,12 @@ with a "done when".
   tracklists; Spinitron needs a per-station token; WFMU and Hype Machine RSS are
   dead. BBC 6 Music still unprobed. See NOTES.md before re-investigating.
 - ListenBrainz `fresh-releases` as a new-release source (free, no key, works).
+- Wikipedia canonical lists for classic-rock anchors. Works and needs no key, but
+  yields ~20 songs, not 500 (Wikipedia publishes only each edition's top ten).
+  Worth it for canon seeds, not for volume.
+- Deezer genre charts (28 genres, free, no key) for the "genuinely popular"
+  bucket. Note these are popularity charts with no human reasoning attached, so
+  they contribute no story material.
 - Backend LLM extraction from article text, to unlock Pitchfork / Bandcamp Daily
   / The Quietus as real sources (see ADR-004).
 - Popularity buckets: ~40% well-known / 40% mid-tail / 20% wildcard. Use
