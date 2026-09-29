@@ -102,3 +102,28 @@ that let unread code accumulate until the codebase felt foreign. Rules that cost
 speed on purpose are the point.
 
 **Cost:** materially slower. Accepted. Full rules in `CLAUDE.md`.
+
+---
+
+## ADR-006 — Sample across eras, not just recent plays
+**2026-09-29 · accepted**
+
+Draw candidates from random historical windows of the KEXP archive as well as
+from recent plays, and budget the playlist across eras.
+
+**Alternatives:** (a) recent plays only — simplest, but it's the recency trap
+that makes Apple Music's own discovery boring; (b) buy a catalog dataset;
+(c) use critic aggregates like Album of the Year or Acclaimed Music, which skew
+historical — rejected for now because neither has an API.
+
+**Why:** the stated goal is music Mason doesn't know, not music that is new. Those
+are different sets, and only the second one is what a play log's first page gives
+you. KEXP's `airdate_after`/`airdate_before` filters reach back to 2001 at no
+cost, with the same DJ-comment grounding that makes the source worth using.
+
+**Cost:** more API calls per run, and DJ comments thin out before ~2015, so
+older picks carry less story material. An era budget is another tuning knob that
+can be got wrong.
+
+**Open:** what the budget should be. A starting guess is recent / last decade /
+older, but it should be a parameter, not a constant, until it's been listened to.

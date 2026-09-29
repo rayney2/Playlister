@@ -128,3 +128,25 @@ Not needed: **KEXP DJ comments already contain Bandcamp artist links** —
 appeared in a single 12-track run. So the story layer can already point at
 "buy this directly from the artist" for free, just by extracting URLs from the
 blurbs we're storing anyway.
+
+## KEXP serves its whole archive, not just the last hour (2026-09-29)
+
+`api.kexp.org/v2/plays/` accepts `airdate_after` and `airdate_before` as ISO
+timestamps, and the archive reaches back to at least 2001. Verified samples:
+
+| window | example play | DJ comment? |
+|---|---|---|
+| 2019-06-01 | Saint Etienne — Only Love Can Break Your Heart | — |
+| 2015-06-01 | Blur — My Terracotta Heart | yes |
+| 2010-06-01 | Anita Tijoux — Crisis de un MC | no |
+| 2005-06-01 | Head of Femur — Ringodom or Proctor | no |
+| 2001-06-01 | Gorillaz — Clint Eastwood (alternate version) | — |
+
+This matters because the default pull (`offset=0`) is the last ~2 hours of radio,
+which is a recency trap: every run would surface this month's releases. Sampling
+random historical windows fixes it for free, from the API we already use, with
+the same DJ-comment grounding. Comments thin out before ~2015.
+
+Note `offset` does NOT paginate backwards in time usefully — `offset=20000`
+returned plays from 2026-08-09 and `offset=200000` from 2025-05-03, so the
+ordering isn't a clean reverse chronology at depth. Use the date filters.

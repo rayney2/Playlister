@@ -35,7 +35,7 @@ interface ItunesResponse {
   results: ItunesResult[];
 }
 
-function scoreMatch(c: MergedCandidate, r: ItunesResult): 'exact' | 'fuzzy' | null {
+export function scoreMatch(c: MergedCandidate, r: ItunesResult): 'exact' | 'fuzzy' | null {
   const wantTitle = norm(c.title);
   const wantArtist = norm(c.artist);
   const gotTitle = norm(r.trackName);

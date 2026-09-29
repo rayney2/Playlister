@@ -33,6 +33,12 @@ has a clear "done" condition.
    *Done when:* every track in a run carries an ISRC, history is keyed by it, and
    the resolver reports when its two sources disagree.
 
+6. **Era sampling** (ADR-006). Pull from random historical KEXP windows
+   alongside recent plays, and budget the playlist across eras using release
+   dates from iTunes/Deezer.
+   *Done when:* a single run contains picks from at least three different
+   decades, and the budget is a parameter rather than a constant.
+
 ## Parking lot
 
 Ideas, not commitments. Nothing here is scheduled. Promote to the backlog only
