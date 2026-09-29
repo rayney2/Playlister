@@ -1,0 +1,11 @@
+{
+  "name": "playlister",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "On-demand human-curated music discovery: curated sources -> dedupe -> Apple Music resolution -> grounded listening guide.",
+  "scripts": {
+    "discover": "node --experimental-strip-types src/cli.ts",
+    "probe:feeds": "node --experimental-strip-types src/cli.ts --probe-feeds"
+  }
+}
