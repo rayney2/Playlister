@@ -60,6 +60,9 @@ behaviour (`TODO(human)` markers) rather than finished code.
 
 ## Files that carry context
 
+- `SOURCES.md` — the labelled source registry: what each source yields, what's
+  verified working, and what's ruled out and why. Check here before hunting for
+  a new source.
 - `NOTES.md` — measured facts about live APIs. Read before touching sources or
   the resolver. Don't re-derive what's already measured there.
 - `DECISIONS.md` — one entry per hard-to-reverse decision. Append, don't rewrite.
