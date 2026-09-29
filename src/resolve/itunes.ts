@@ -28,6 +28,10 @@ interface ItunesResult {
   collectionName?: string;
   trackViewUrl: string;
   trackTimeMillis?: number;
+  /** Broad genre, e.g. "Hip-Hop/Rap", "Jazz", "Classical". Free in this response. */
+  primaryGenreName?: string;
+  /** ISO date. Used for era bucketing without a second lookup. */
+  releaseDate?: string;
 }
 
 interface ItunesResponse {
@@ -152,6 +156,8 @@ export async function resolveTracks(
       appleArtist: hit.result.artistName,
       appleTitle: hit.result.trackName,
       durationMs: hit.result.trackTimeMillis,
+      genre: hit.result.primaryGenreName,
+      releaseDate: hit.result.releaseDate,
       availableInStorefront: available,
       matchMethod: hit.method,
     };

@@ -2,11 +2,14 @@ import { fetchText } from '../lib/http.ts';
 import type { Candidate } from '../lib/types.ts';
 
 /** Editorial feeds that respond to a bot User-Agent. Verified 2026-09-29. */
+// `name` doubles as the source id, so it must match a key in registry.ts
+// exactly - a mismatch means the track is silently mislabelled rather than
+// erroring.
 export const FEEDS: Array<{ name: string; url: string }> = [
-  { name: 'Pitchfork', url: 'https://pitchfork.com/rss/news/' },
-  { name: 'Stereogum', url: 'https://www.stereogum.com/feed/' },
-  { name: 'Bandcamp Daily', url: 'https://daily.bandcamp.com/feed' },
-  { name: 'NPR Music', url: 'https://feeds.npr.org/1039/rss.xml' },
+  { name: 'pitchfork', url: 'https://pitchfork.com/rss/news/' },
+  { name: 'stereogum', url: 'https://www.stereogum.com/feed/' },
+  { name: 'bandcamp_daily', url: 'https://daily.bandcamp.com/feed' },
+  { name: 'npr_music', url: 'https://feeds.npr.org/1039/rss.xml' },
 ];
 // Known-bad: pitchfork.com/feed/feed-best-new-*/rss and /rss/reviews/best/tracks/
 // both 404 as of 2026-09-29. thequietus.com/feed/ returns 403 to a bot UA.

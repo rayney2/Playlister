@@ -224,3 +224,52 @@ Caveat: these are **current popularity charts, not curation**, and genres overla
 (Tame Impala appeared in All, Dance and Alternative). Good for the "genuinely
 popular" bucket. No human wrote a reason for any of these picks, so they bring no
 story material.
+
+## Expanded-source test run (2026-09-30)
+
+17 sources wired: KEXP, SomaFM, 6 BBC stations, 2 ABC stations, Deezer charts,
+Deezer editorial, Billboard year-end, and 4 editorial feeds.
+
+**Before** (2 sources, no caps): 12 tracks, all indie/experimental electronic, one
+station supplying 94% of candidates.
+
+**After** (17 sources, caps + reach mix): 13 tracks across Pop, Alternative, Indie
+Pop and Rock; four decades (1980s, 2000s, 2010s, 2020s); reach 4 popular / 5 mid /
+4 niche.
+
+Cross-source agreement now works, which it could not before — with two
+non-overlapping sources every track had exactly one endorsement. Real examples
+from one run: "Na Na" appeared on BBC Radio 1, 1Xtra *and* Asian Network; Lime
+Garden on Stereogum and 6 Music; Beck on Double J and KEXP; Tears for Fears on
+KEXP and Billboard. That agreement is the acclaim signal the ranking was always
+meant to use.
+
+### Bugs found and fixed in this round
+
+- **BBC `limit` has a low ceiling.** `limit=20` returns HTTP 400 and `limit=10`
+  yields about 7 segments. The adapter asked for 30, so all six stations threw and
+  silently contributed zero. Now 10.
+- **Billboard in rank order produced the actual charts.** The first run returned
+  Billboard's 2014 top twelve in order — maximally familiar, zero discovery.
+  Fixed by striding ranks (now samples #1, #35, #69, …).
+- **Source ids must match registry keys exactly.** The adapter emitted `KEXP`
+  while the registry key was `kexp`, so those tracks were mislabelled rather than
+  erroring. All 17 ids are now asserted present.
+- **The reach mix has to be applied at selection, not only at resolution.** The
+  attempted pool is grouped by reach, so taking the first N resolved tracks gave
+  12 of 15 "popular". Added `selectFinal()`.
+
+### Known problems, unfixed
+
+- **Under-filling.** 13 tracks returned for a 15-track request. Four simultaneous
+  caps cannot be satisfied from a 30-track attempted pool. This is the
+  over-constraint risk, and the fix is a larger pool, which is what ADR-008 is for.
+- **Billboard picks still cluster in one year.** `fetchBillboardYears` interleaves
+  years, but the pipeline sorts candidates by `seenAt` descending and chart entries
+  carry `seenAt = <year>-12-31`, so the most recent sampled year sorts to the front
+  again. A fix upstream was defeated by a sort downstream. Options: stop setting
+  `seenAt` on chart sources (a chart year is not a recommendation date), or sort
+  chart candidates separately.
+- **Genre cap leaks.** Pop reached 6 against a cap of 5, because the third
+  selection pass relaxes the genre cap rather than return a short playlist. That
+  relaxation order is deliberate but unratified — see ADR-007's open question.

@@ -160,3 +160,47 @@ hand-written claims about each source, so they can drift from reality.
 
 **Open:** the target shape itself. Genre spread, era spread and the per-source cap
 should all be parameters, not constants, until Mason has listened to a few runs.
+
+---
+
+## ADR-008 — Build a scheduled candidate pool; serve Siri from it
+**2026-09-30 · proposed**
+
+Split the system into two jobs instead of one.
+
+1. A **scheduled builder** (Cloudflare Cron Triggers, free tier) runs on a timer:
+   pulls every source, merges, resolves to Apple Music, and writes each track to
+   storage with its genre, era, reach, ISRC and grounding blurbs. This is the
+   candidate pool.
+2. The **Siri request** only assembles a playlist from that pool and generates the
+   story. No source fetching, no resolution.
+
+**Alternatives:** (a) keep everything in the request, as now; (b) cache responses
+per source with a TTL, which reduces but does not remove per-request fetching and
+resolution.
+
+**Why.** Four measured problems all have the same cause — doing slow work inside a
+voice request:
+
+- **Latency.** A 13-track run takes ~39 seconds with 17 sources. Nobody says
+  "Hey Siri, discover music" and waits that long, and adding sources makes it
+  worse.
+- **Rate limits.** iTunes tolerates roughly 20 requests a minute, and the resolver
+  needs two calls per track. That ceiling caps how large a candidate pool can be
+  when it has to be built during a request.
+- **Under-filling.** With per-source, per-genre, per-artist and per-era caps all
+  active, a 15-track request returned 13 tracks. The caps are not wrong; the
+  attempted pool (30) is too small to satisfy them. A bigger pool is the fix, and
+  a bigger pool is only affordable offline.
+- **LLM extraction.** Editorial feeds need a model to extract tracks from prose
+  (ADR-004). Paying for that per Siri invocation is wasteful; doing it once per
+  scheduled build is cheap.
+
+**Cost.** Two deploy targets instead of one, and a storage dependency (Workers KV
+or D1) that the current in-memory pipeline doesn't need. Recommendations become as
+fresh as the schedule rather than live — acceptable, since nothing here is
+breaking news. Adds a failure mode where a stale pool serves old picks, so the
+builder needs monitoring.
+
+**Open:** schedule frequency; whether the pool is one flat table or partitioned by
+reach/genre; and how the feedback loop marks pool entries as already served.

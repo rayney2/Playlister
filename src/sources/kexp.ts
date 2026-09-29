@@ -48,7 +48,7 @@ export async function fetchKexp(limit = 120): Promise<Candidate[]> {
       artist: p.artist!.trim(),
       title: p.song!.trim(),
       album: p.album?.trim() || undefined,
-      source: 'KEXP',
+      source: 'kexp',
       blurb: p.comment?.trim() || undefined,
       sourceUrl: `https://kexp.org/playlist/${p.airdate.slice(0, 10)}/`,
       seenAt: p.airdate,

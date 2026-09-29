@@ -46,4 +46,8 @@ export interface ResolvedTrack extends MergedCandidate {
   availableInStorefront: boolean;
   /** How we matched: exact string, fuzzy string, or ISRC (paid path). */
   matchMethod: 'exact' | 'fuzzy' | 'isrc';
+  /** Broad genre from iTunes, e.g. "Jazz". The per-track label, vs the source's claim. */
+  genre?: string;
+  /** ISO release date from iTunes, for era bucketing. */
+  releaseDate?: string;
 }
