@@ -40,6 +40,19 @@ in particular will block a client that hammers it.
 
 ## Part 2 — Free keys worth getting
 
+### First, why these forms ask for a callback URL
+
+Every one of these signup forms is designed for **OAuth** — the flow where your app
+acts *on behalf of another user*, so that person gets bounced to the service, approves
+your app, and is then sent back to your "callback URL" carrying a code.
+
+**We never do that.** We only read public data, authenticated as the app itself. The
+key or token goes straight onto the request and no human ever approves anything. So
+the callback URL is a field we have to satisfy and will never use.
+
+That means: leave it blank where allowed, and where the form insists, put a loopback
+address. Nothing will ever be sent to it.
+
 Three services need a key, all free, all a few minutes. None require payment or a
 card.
 
@@ -50,10 +63,17 @@ widening the pool beyond playlist search.
 
 1. Go to **https://www.last.fm/api/account/create**
 2. Sign in (or make a free Last.fm account).
-3. Fill in an application name (`Playlister`) and a description. Callback URL and
-   homepage can be left blank for read-only use.
-4. Submit. The **API key** appears immediately. Copy it. (There's also a shared
-   secret — you don't need it for read-only calls.)
+3. Fill the form in exactly like this:
+
+   | field | what to put |
+   |---|---|
+   | Application name | `Playlister` |
+   | Application description | `Personal music discovery tool. Reads genre tags and top tracks to build curated playlists for my own listening.` |
+   | Application homepage | `https://github.com/rayney2/Playlister` — or blank |
+   | Callback URL | **leave blank.** If the form refuses to submit, use `http://127.0.0.1:3000/callback` |
+
+4. Submit. The **API key** appears immediately. Copy it. You also get a shared
+   secret — not needed for read-only calls, but keep it somewhere safe anyway.
 
 Verify:
 
@@ -72,12 +92,24 @@ You should see a `toptracks` object. If the key is wrong you get a clear message
 Worth having because no other service has as many user playlists. Read-only public
 data needs no user login, just an app registration (the Client Credentials flow).
 
-1. Go to **https://developer.spotify.com/dashboard**
-2. Log in with a normal Spotify account (free tier is fine).
-3. **Create app**. Name and description can be anything. Redirect URI is required
-   by the form but unused by this flow — `http://localhost:3000` is fine.
-4. Agree to the terms, create, then open the app's **Settings**.
-5. Copy the **Client ID**, then **View client secret** and copy that too.
+1. Go to **https://developer.spotify.com/dashboard** and click **Create app**.
+2. Fill it in like this:
+
+   | field | what to put |
+   |---|---|
+   | App name | `Playlister` |
+   | App description | `Personal music discovery tool reading public playlists and catalogue data.` |
+   | Redirect URI | `http://127.0.0.1:3000/callback` |
+   | Which API/SDKs | check **Web API** only |
+
+   **Use the loopback IP `127.0.0.1`, not the word `localhost`.** Spotify's own
+   documentation uses `http://127.0.0.1:8080` as its example, and the literal string
+   `localhost` has been rejected by their validation. The port number is arbitrary
+   since nothing listens there.
+
+3. Tick the Developer Terms of Service box and create.
+4. The **Client ID** is on the app's overview page. Click **View client secret** for
+   the other half.
 
 Get a token (they last 1 hour, so the backend requests one per run):
 
@@ -105,10 +137,17 @@ want — confirm it still returns what you need before building on it.
 
 Only needed to lift the ~25/minute unauthenticated rate limit.
 
+**You do not need to register an application here.** That page shows two separate
+things, and the one you want takes no form at all:
+
+- *"Register your application"* — asks for a name, description and callback URL. This
+  is the OAuth path, for acting on behalf of other Discogs users. **Skip it.**
+- *"Personal access token"* — a single **Generate new token** button. **This is the one.**
+
 1. Go to **https://www.discogs.com/settings/developers**
 2. Sign in to a free Discogs account.
-3. Click **Generate new token** under *Personal access token*.
-4. Copy it. This is a single token — no OAuth dance needed for read-only search.
+3. Click **Generate new token**.
+4. Copy it. No form, no app details, no callback.
 
 Verify:
 
