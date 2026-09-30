@@ -60,6 +60,7 @@ behaviour (`TODO(human)` markers) rather than finished code.
 
 ## Files that carry context
 
+- `ACCESS.md` — how to get credentials for every source, and which need none.
 - `SOURCES.md` — the labelled source registry: what each source yields, what's
   verified working, and what's ruled out and why. Check here before hunting for
   a new source.

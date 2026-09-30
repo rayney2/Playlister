@@ -374,3 +374,98 @@ same song arriving twice, but agreement doesn't decide order.
 
 Seed choice; how many hops before a genre may shift; the strong-to-weak edge
 ordering; and whether artists are unique per chain or only tracks.
+
+---
+
+## ADR-011 — Build a music map from playlist co-occurrence
+**2026-09-30 · proposed**
+
+Mine the playlists we harvest for **track co-occurrence** and store the result as a
+persistent graph. An edge means *a human put these two tracks together*.
+
+This changes ADR-010's edges: co-occurrence becomes the primary chain link, and the
+four universal attribute edges (related artist, shared label, genre, era) become the
+fallback for tracks the map doesn't cover yet.
+
+### Why this is better than what ADR-010 proposed
+
+ADR-010's edges are indirect. Deezer's related-artists is algorithmic and works at
+*artist* level. Shared genre and nearby release date are attribute coincidences —
+two 1983 records aren't meaningfully connected just because they're both from 1983.
+
+Playlist co-occurrence is **track-level and human-authored**. If two tracks appear
+together in fourteen different playlists, fourteen people independently decided they
+belong near each other. That is exactly the "loosely connected" link the chain needs,
+and it is a much stronger claim than any attribute match.
+
+It also costs no extra fetching. We are already pulling playlist tracks for the pool;
+the map is built from storing what passes through.
+
+### Two grades of edge
+
+**Co-membership** — both tracks appear in the same playlist.
+**Adjacency** — they appear *consecutively*. Someone sequenced them deliberately, so
+this is the stronger signal. Deezer returns playlist tracks in order, so adjacency is
+available for free.
+
+### The critical detail: normalise, don't count
+
+Raw co-occurrence counts will surface hits and nothing else, because a popular track
+co-occurs with everything. The edge has to mean "these two appear together *more than
+their individual popularity explains*" — a pointwise-mutual-information style measure
+rather than a tally.
+
+Without this the map degenerates into a popularity chart with extra steps, which is
+the exact failure this project exists to avoid.
+
+### Playlist quality has to be weighted
+
+Not all harvested playlists are equal signal. Observed while probing: a 918-track
+"Disco Soul Dance Funk & HipHop Hits 70's" and a 292-track "Ambient Dreams - Peaceful
+Relaxation Music" sit alongside a 70-track "Krautrock Essentials". The first two are
+near-random dumps; the third is a considered selection.
+
+So weight each playlist's contribution inversely to its size, and consider excluding
+very large or generically-titled playlists outright. A 50-track themed playlist is
+worth more than a 900-track catch-all.
+
+### What the map gives beyond chain edges
+
+- **Emergent genre neighbourhoods**, discovered from how people actually group music
+  rather than from iTunes' genre labels.
+- **Bridge tracks** — tracks connecting otherwise separate clusters. This recovers the
+  "crossing taste communities" idea from ADR-009, but measured at track level from real
+  human groupings instead of inferred from source labels.
+- **A compounding asset.** Every scheduled build makes the map denser. Unlike a
+  candidate pool, it does not go stale — a human grouping from last year is still a
+  human grouping.
+
+A second, personal layer can sit on top later: the playlists *we* generate, plus what
+Mason keeps or skips, form a much smaller graph of his own taste. Worth keeping
+separate from the public map so one can't contaminate the other.
+
+### Alternatives
+
+- **Attribute edges only** (ADR-010 as written) — works with no storage, but the links
+  are weak and not human-authored.
+- **Deezer related-artists only** — free and universal, but artist-level and
+  algorithmic, so it recreates the similarity engines we can't beat.
+- **Audio-feature similarity** — unavailable free, and competes where we lose.
+
+### Cost and risk
+
+- **Needs real storage**, so ADR-008's scheduled builder becomes a hard prerequisite.
+  A graph cannot be rebuilt inside a voice request.
+- **Cold start.** A track in one playlist has no usable edges. The attribute edges are
+  the fallback, which means both systems must exist.
+- **Scope.** This is a graph-building project sitting inside a playlist project. It is
+  the largest single piece of work proposed so far and should be timeboxed against a
+  question it answers, not built speculatively.
+- Deezer's per-query `total` caps near 150, so map growth depends on the breadth of the
+  genre-term vocabulary used to harvest.
+
+### Open
+
+Storage shape (D1 relational vs KV adjacency lists); the normalisation formula and its
+minimum-occurrence threshold; playlist quality cutoffs; and whether adjacency and
+co-membership are one weighted edge or two separate ones.
