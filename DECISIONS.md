@@ -204,3 +204,84 @@ builder needs monitoring.
 
 **Open:** schedule frequency; whether the pool is one flat table or partitioned by
 reach/genre; and how the feedback loop marks pool entries as already served.
+
+---
+
+## ADR-009 — Score tracks for specialness; stop labelling reach per source
+**2026-09-30 · proposed**
+
+Replace the per-source `reach` label as the selection axis with a **per-track
+specialness score**, computed from data the pipeline already fetches.
+
+### The problem with what we have
+
+`reach` is a hand-written claim about a *source*, so every track from Billboard is
+"popular" and every track from KEXP is "niche". That is too coarse to express the
+thing actually wanted. Billboard's #1 of 2014 and Billboard's #78 of 1979 carry
+the same label, but one is a song everybody has heard and the other is a forgotten
+chart record — which is exactly the interesting case.
+
+It also conflated two different asks. "More popular" and "truly special" pull in
+opposite directions when popular means *current chart-topper*. They stop
+conflicting once the axis is **familiar versus chart-current** rather than
+popular versus obscure.
+
+### The score
+
+Five components, all available from calls already being made:
+
+1. **Dissimilar-source agreement.** Not the number of endorsements, but how
+   *unlike* the endorsing sources are. Two indie blogs agreeing is weak. A track
+   played on both a hip-hop show and a jazz show is crossing taste communities.
+   Collaborative filtering structurally cannot find this — it works within
+   clusters, and this signal is about travelling between them.
+
+2. **Rediscovery gap** = curation date − release date. A DJ choosing a 1983 record
+   *this week* means a person reached back for it. **Measured: 37% of a 100-play
+   KEXP sample were records 15+ years old**, including Colourbox (1983), Portishead
+   album cuts, Leonard Cohen (1967). Streaming algorithms cannot surface these,
+   because an old track with no current streams has no collaborative signal.
+   This is the strongest single edge available and it costs nothing — `releaseDate`
+   comes free from iTunes and the play date comes free from the source.
+
+3. **Obscurity** = inverse of Deezer's `rank`. The valuable quadrant is *low
+   popularity × high curator conviction*: a record several respected curators
+   played that almost nobody streams.
+
+4. **Canon penalty.** Subtract for presence on current charts or Apple's
+   most-played. The inverse of what every other generator optimises for.
+
+5. **Has a human reason** — a gate, not a score component. Without a DJ comment or
+   critic blurb there is nothing for the story layer to quote, and the story is
+   half the product.
+
+### Alternatives
+
+- **Keep per-source reach** — simple, already built, but cannot distinguish a
+  chart #1 from a chart #78, which is the whole point.
+- **Audio-feature similarity** — what Spotify does; unavailable on the free path
+  (Deezer's `bpm` returned 0 in testing) and would make this a worse copy of an
+  existing product rather than a different one.
+- **Ask an LLM to rate specialness** — unreliable and expensive per track, and it
+  would be guessing from training data rather than measuring our own signals.
+
+### Why
+
+The goal was never a better recommendation engine. Streaming services have more
+data and will win on similarity forever. The defensible position is the set of
+songs their signals *cannot reach*: records with no current engagement, records
+loved by curators but not streamed, records that travel between communities. Those
+are findable with what we already have.
+
+### Cost
+
+A scoring function is a new thing to tune, and tuning needs listening rather than
+metrics — there is no ground truth for "special". Weights will be wrong at first.
+Rediscovery and obscurity also raise `resolve_risk`: older and less popular records
+are likelier to be missing from Apple Music, so over-fetching has to increase.
+
+### Open
+
+The weights, and whether specialness ranks candidates or merely gates them. Also
+whether to keep a small deliberate share of genuinely familiar tracks as anchors,
+so the playlist has somewhere to stand.
