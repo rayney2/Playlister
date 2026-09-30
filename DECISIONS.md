@@ -285,3 +285,92 @@ are likelier to be missing from Apple Music, so over-fetching has to increase.
 The weights, and whether specialness ranks candidates or merely gates them. Also
 whether to keep a small deliberate share of genuinely familiar tracks as anchors,
 so the playlist has somewhere to stand.
+
+---
+
+## ADR-010 — Build the playlist as an acyclic chain over a large curated pool
+**2026-09-30 · proposed**
+
+Supersedes the reach-quota selection in ADR-007 and the reach labelling in ADR-009.
+Labels stay, but as **description of what a run produced**, not as selection quotas.
+
+### Shape
+
+1. **Pool**: a large set of candidates, from curated sources only.
+2. **Walk**: start at a seed track, then repeatedly step to a track linked to the
+   *previous* one. Never revisit a track or an artist — the chain is acyclic and
+   has no repeats.
+3. **Genre is the continuity, not the variable.** Genre should stay broadly stable
+   along the chain. Movement comes from the other edges. Drift is permitted but
+   never forced.
+4. **Story**: pick a few tracks, or the genre the chain spent most of its length in,
+   and research those by retrieval.
+
+Each hop records *why* it was taken. Those reasons are the story's spine, so the
+narrative structure falls out of selection rather than being invented afterwards.
+
+### Sources: curated only, no charts
+
+**Billboard is dropped.** Chart position is not curation — no person chose those
+songs, so a chart entry can contribute no reason and cannot justify a hop.
+
+Dropping it costs no mainstream music, which was the worry. Katy Perry on BBC
+Radio 2 is a *person* choosing to play Katy Perry. Familiar music arrives through
+curated sources with a human attached, which is what was wanted; taking it from a
+chart was the error.
+
+Sources become: radio play logs (KEXP, BBC ×6, ABC ×2, SomaFM), editorial
+(Deezer editorial, and the critic feeds once LLM extraction exists), and
+**playlists made by other people**, which is where the volume comes from.
+
+### Edges must be universal
+
+KEXP's `labels` and MusicBrainz artist ids exist only on KEXP rows, so they cannot
+carry a chain that spans every source. Four edges work for any track, free and
+keyless (all verified, see SOURCES.md):
+
+- **related artist** — Deezer `/artist/<id>/related`
+- **shared record label** — Deezer `/album/<id>` → `label`
+- **same broad genre** — iTunes `primaryGenreName`
+- **near in time** — iTunes `releaseDate`
+
+Strong links (same label, related artist) are preferred; weak links (same genre,
+same decade) are the fallback when the walk would otherwise stall.
+
+### Pool size is the prerequisite
+
+A chain needs density or most hops have no candidate. Deezer playlist search
+supplies it: **14 genre terms returned 2,115 playlists holding roughly 80,000
+tracks**, and obscure terms ("dungeon synth", "funk 45", "no wave") return as many
+matches as broad ones. `total` caps near 150 per query, so pool size is set by how
+large the genre-term vocabulary is, not by pagination.
+
+Cross-source agreement is **no longer a ranking signal**. Merging still dedupes the
+same song arriving twice, but agreement doesn't decide order.
+
+### Alternatives
+
+- **Filter, sort, cap, slice** — what exists now. Produces a set with no relation
+  between neighbours, so the story has no structure to describe.
+- **Cluster into genre buckets** — gives grouping, but a playlist assembled from
+  buckets reads as several playlists concatenated. A chain relates each track to
+  its neighbour, which is what "loosely connected" means.
+- **Forced drift** — considered and rejected: it fights the requirement that genre
+  stay stable.
+
+### Cost and risk
+
+- **Sameness is now the failure mode**, not incoherence. With genre stable and no
+  forced drift, a walk can circle one small neighbourhood. The counterweight is
+  pool size plus a specialness preference among eligible next steps.
+- **A chain is a sequence**, so this reintroduces ordering, which was previously
+  called unimportant. Playback order can still be ignored; the chain is needed for
+  *selection* and for the story regardless.
+- Walks can dead-end and need a restart-or-backtrack rule.
+- Edge lookups cost extra API calls per candidate, which only works against a
+  pre-built pool — so ADR-008 becomes a prerequisite rather than an optimisation.
+
+### Open
+
+Seed choice; how many hops before a genre may shift; the strong-to-weak edge
+ordering; and whether artists are unique per chain or only tracks.

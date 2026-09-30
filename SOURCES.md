@@ -287,3 +287,89 @@ R&B, reggaeton**, plus era coverage from 1914 to this week.
 The remaining gap is **critic-curated canon at volume**. Wikipedia's critic lists
 are excerpts, and Acclaimed Music — the one source that would solve it — blocks
 us. Billboard year-end fills the hole with popularity canon instead.
+
+---
+
+## Playlists made by other people — the volume answer (2026-09-30)
+
+### Deezer playlist search
+`access: free` · `status: working` · `curation: human-crowd` · `story: no` ·
+`era: any` · `volume: very high` · `resolve_risk: low`
+
+`api.deezer.com/search/playlist?q=<term>` then `api.deezer.com/playlist/<id>/tracks`
+
+No key. Searchable by any genre, scene or mood term. Someone sat down and built
+each of these, which makes it human curation at a scale no radio station can match.
+
+Measured across 14 genre terms:
+
+| term | playlists matched | tracks in top 30 |
+|---|---|---|
+| post punk | 153 | 10,175 |
+| shoegaze | 150 | 8,866 |
+| krautrock | 150 | 8,464 |
+| free jazz | 150 | 7,576 |
+| dungeon synth | 150 | 6,775 |
+| dub | 151 | 5,630 |
+| northern soul | 150 | 5,660 |
+| ethio jazz | 150 | 5,515 |
+| cumbia | 150 | 4,567 |
+| bossa nova | 158 | 4,281 |
+| no wave | 151 | 4,169 |
+| city pop | 150 | 3,833 |
+| highlife | 151 | 3,299 |
+| funk 45 | 151 | 1,988 |
+
+**14 terms → 2,115 playlists → roughly 80,000 tracks** from sampling 30 playlists
+each. Even deliberately obscure terms return full result sets: "dungeon synth" and
+"funk 45" match as many playlists as "dub".
+
+Verified content is records rather than radio sets — "Krautrock Essentials" returns
+CAN's "Vitamin C", Neu!'s "Hallogallo", Harmonia, La Düsseldorf.
+
+**Important limit:** `total` caps around 150–158 per query regardless of the term,
+so scale comes from *many queries*, not deep pagination. A genre-term vocabulary is
+therefore the thing that determines pool size.
+
+### Discogs — actual records, no token needed
+`access: free` · `status: working` · `curation: archive` · `story: no` ·
+`era: archive` · `volume: very high` · `resolve_risk: med`
+
+`api.discogs.com/database/search?q=<term>&type=release` returned **29,796**
+krautrock releases with year and label, with no token — despite Discogs
+documenting one. Release-oriented rather than track-oriented, which suits
+"actual records".
+
+Treat as unverified for sustained use: Discogs rate-limits unauthenticated
+requests hard (documented around 25/minute), so a token is probably needed in
+practice even though one isn't needed to get a response.
+
+### Also working
+- **ListenBrainz user playlists** — `api.listenbrainz.org/1/user/<name>/playlists`.
+- **MusicBrainz release-by-label** — `?query=label:4AD` works, which gives
+  label-mates for any label without depending on KEXP.
+
+### Needs a key (free to obtain, not obtained)
+- **Last.fm** — 400 without a key. `tag.getTopTracks` would give genre-tagged
+  tracks at volume.
+- **Spotify** — 401 without auth. Client Credentials is free to register and has
+  the largest playlist ecosystem of any service.
+
+---
+
+## Universal chain edges (2026-09-30)
+
+Chain links must work for a candidate from *any* source. KEXP's `labels` and
+MusicBrainz artist ids only exist on KEXP rows, so they cannot carry the chain.
+These four are available for every track, free and keyless:
+
+| edge | source | verified |
+|---|---|---|
+| **related artist** | `api.deezer.com/artist/<id>/related` | Portishead → Massive Attack, Hooverphonic, Archive, UNKLE, Morcheeba, Björk, Sneaker Pimps, Goldfrapp |
+| **record label** | `api.deezer.com/album/<id>` → `label` | Portishead album → `"Island Mercury"` |
+| **broad genre** | iTunes `primaryGenreName` | already fetched by the resolver |
+| **era** | iTunes `releaseDate` | already fetched by the resolver |
+
+**Use iTunes for genre, never Deezer.** Deezer localises: that album's genre came
+back as `ロック` and Portishead's top track as `グローリー・ボックス`. Its `label`
+and `related` fields are language-neutral and safe.
