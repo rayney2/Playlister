@@ -373,3 +373,60 @@ These four are available for every track, free and keyless:
 **Use iTunes for genre, never Deezer.** Deezer localises: that album's genre came
 back as `ロック` and Portishead's top track as `グローリー・ボックス`. Its `label`
 and `related` fields are language-neutral and safe.
+
+---
+
+## Spotify: credentials work, the endpoints we need do not (2026-10-02)
+
+Tested with a valid Client Credentials token. The token mints fine and catalogue
+search works, but **everything the music map needs is blocked**:
+
+| endpoint | result |
+|---|---|
+| `/v1/search?type=artist\|track\|album` | **200** — works |
+| `/v1/albums/<id>/tracks` | **200** — works |
+| `/v1/search?type=playlist` | 200, but `limit` above 19 returns `Invalid limit`, and results are null-padded (limit=10 yields 8 usable) |
+| **`/v1/playlists/<id>/tracks`** | **403 Forbidden** — for *every* playlist, including Spotify's own editorial ones (`37i9dQZF1DXcBWIGoYBM5M`) |
+| **`/v1/artists/<id>/related-artists`** | **403 Forbidden** |
+
+This is Spotify's late-2024 restriction on new third-party apps, not a scope or
+token problem — the same token succeeds on catalogue endpoints in the same run.
+
+**Consequence:** Spotify cannot feed the co-occurrence map (ADR-011) and cannot
+supply chain edges (ADR-010). It offers nothing we don't already get free from
+iTunes and Deezer, so it is not wired in. The credentials stay in `.env` in case
+the policy changes.
+
+**Deezer remains the playlist workhorse**: 150 playlists per query, full track
+access, no key. Last.fm's `artist.getSimilar` replaces Spotify's related-artists
+and is arguably better for this project — it is derived from human tagging rather
+than listening behaviour (Slowdive → my bloody valentine 1.00, Lush 0.89, Cocteau
+Twins 0.78).
+
+---
+
+## Spotify: credentials work, the endpoints we need do not (2026-10-02)
+
+Tested with a valid Client Credentials token. The token mints fine and catalogue
+search works, but **everything the music map needs is blocked**:
+
+| endpoint | result |
+|---|---|
+| `/v1/search?type=artist`, `track`, `album` | **200** — works |
+| `/v1/albums/<id>/tracks` | **200** — works |
+| `/v1/search?type=playlist` | 200, but `limit` above 19 returns `Invalid limit`, and results are null-padded (limit=10 yields 8 usable) |
+| **`/v1/playlists/<id>/tracks`** | **403 Forbidden** — for *every* playlist, including Spotify's own editorial ones (`37i9dQZF1DXcBWIGoYBM5M`) |
+| **`/v1/artists/<id>/related-artists`** | **403 Forbidden** |
+
+This is Spotify's late-2024 restriction on new third-party apps, not a scope or
+token problem — the same token succeeds on catalogue endpoints in the same run.
+
+**Consequence:** Spotify cannot feed the co-occurrence map (ADR-011) and cannot
+supply chain edges (ADR-010). It offers nothing we don't already get free from
+iTunes and Deezer, so it is not wired in. The credentials stay in `.env` in case
+the policy changes.
+
+**Deezer remains the playlist workhorse**: 150 playlists per query, full track
+access, no key. Last.fm's `artist.getSimilar` replaces Spotify's related-artists
+and is arguably better here — it derives from human tagging rather than listening
+behaviour (Slowdive → my bloody valentine 1.00, Lush 0.89, Cocteau Twins 0.78).

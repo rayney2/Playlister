@@ -273,3 +273,72 @@ meant to use.
 - **Genre cap leaks.** Pop reached 6 against a cap of 5, because the third
   selection pass relaxes the genre cap rather than return a short playlist. That
   relaxation order is deliberate but unratified — see ADR-007's open question.
+
+## First working music map and chain walk (2026-10-02)
+
+The mechanism works end to end. The tuning does not. Real numbers.
+
+### Build
+
+180 Deezer playlists across 18 genre terms, 266 seconds:
+
+| | |
+|---|---|
+| track instances | 11,209 |
+| unique tracks | 9,236 |
+| candidate pairs | 40,730 |
+| **edges kept** | **1,626** (pair seen in 2+ playlists) |
+| **tracks with any edge** | **587 of 9,236 — 6%** |
+| max degree | 14 |
+
+### The walk
+
+Seeded into 1980s Japanese city pop and produced nine coherent hops, each link
+justified by two different people placing those tracks near each other:
+
+```
+Kazuhito Murata — Mizu No Envelope
+  -> Akira Inoue — Linda Raru Ram No Oodoori Nite   [pmi 10.9]
+  -> Junko Ohashi — Simple Love                     [pmi 9.6]
+  -> Kaoru Sudo — Tsunoru Omoi                      [pmi 9.6]
+  -> Makoto Matsushita — Lazy Night                 [pmi 10.4]
+  ... 9 steps
+```
+
+That is genuinely obscure, genuinely related music, discovered from human
+groupings. The idea is sound.
+
+### Three problems, all measured
+
+1. **The map is far too sparse: only 6% of tracks have an edge.** Most tracks
+   appear in exactly one harvested playlist, and an edge needs two. Fix is volume -
+   more playlists per term, not more terms.
+
+2. **The chain never left city pop.** All nine steps, one genre. Greedy
+   highest-PMI plus "prefer a shared term" is a recipe for circling one
+   neighbourhood. This is exactly the sameness failure predicted in ADR-010's risk
+   section. Genre should stay *broadly* stable, not frozen - the walk needs to be
+   allowed to move after a few hops.
+
+3. **Only 3 of 9 steps are on Apple Music (33%).** Obscure Japanese reissues are
+   largely absent from the US storefront. Obscurity raises resolve risk, as flagged
+   in ADR-009.
+
+   **This one has a clean fix and it strengthens ADR-008**: resolve tracks during
+   the offline build and keep only playable ones in the map. Then the walk cannot
+   produce an unplayable chain at all. Resolving 9,236 tracks live is impossible;
+   resolving them on a schedule is routine.
+
+4. The walk also dead-ended at 9 of 12 requested steps, a consequence of (1).
+
+### Bugs fixed in this round
+
+- **Deezer localisation was splitting artists in two.** With no `Accept-Language`
+  header Deezer guessed Japanese: Tangerine Dream arrived as タンジェリン・ドリーム,
+  Kraftwerk as クラフトワーク. Those become separate map nodes and separate dedupe
+  keys, so it was a correctness bug. Measured 13 of 30 artist names mangled before,
+  0 after. `Accept-Language: en-US,en;q=0.9` is now sent on every request.
+- **Same-artist edges crowded out every useful hop.** Consecutive album tracks score
+  the highest PMI of anything (an artist's own songs rarely sit beside strangers'),
+  but the walk forbids repeating an artist, so they can never be taken. Now filtered
+  at both build and load time.

@@ -11,6 +11,8 @@
     "probe:feeds": "node --experimental-strip-types src/cli.ts --probe-feeds",
     "test": "node --experimental-strip-types --test",
     "test:watch": "node --experimental-strip-types --test --watch",
-    "verify:keys": "node --env-file=.env --experimental-strip-types src/verify-keys.ts"
+    "verify:keys": "node --env-file=.env --experimental-strip-types src/verify-keys.ts",
+    "harvest": "node --env-file=.env --experimental-strip-types src/cli-harvest.ts",
+    "chain": "node --env-file=.env --experimental-strip-types src/cli-chain.ts"
   }
 }
