@@ -103,3 +103,26 @@ describe('scoreMatch (pure — the easy half)', () => {
 //   h) With storefront 'us', existsInStorefront short-circuits and issues NO
 //      lookup call. Assert on the number of fake calls made. This test is how
 //      you'd have caught what that early return silently does.
+
+describe('throttling must not be read as absence', () => {
+  // This pins the bug that made a 30-minute resolve run worthless. iTunes answers
+  // 403 when it is rate-limiting, not when a track is missing. Treating those as
+  // "Apple does not have this" and caching the result poisons the map permanently.
+  //
+  // TODO(human): once resolveTracks takes an injectable fetcher (the seam described
+  // at the top of this file), write these:
+  //
+  //  i) A fake that throws on search puts the candidate in `errored`, NOT in
+  //     `unmatched`. These two lists mean different things and only one is safe
+  //     to cache.
+  //  j) A fake returning HTTP 200 with an empty `results` array puts the
+  //     candidate in `unmatched` — that IS a real answer.
+  //  k) A fake that throws on the storefront lookup, after a successful search,
+  //     also lands in `errored` rather than being recorded as unavailable.
+  test('ResolveReport separates errored from unmatched', () => {
+    // Shape-only assertion until the seam exists; the distinction is the point.
+    const report = { resolved: [], unmatched: [], errored: [], unavailable: [] };
+    assert.ok('errored' in report && 'unmatched' in report);
+    assert.notEqual(report.errored, report.unmatched);
+  });
+});

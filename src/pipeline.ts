@@ -242,7 +242,7 @@ export async function discover(opts: DiscoverOptions): Promise<DiscoverResult> {
       attempted: attempt.length,
       resolved: report.resolved.length,
       unavailableInStorefront: report.unavailable.length,
-      unmatched: report.unmatched.length,
+      unmatched: report.unmatched.length + report.errored.length,
       reachAchieved: tally(tracks, (t) => reachOf(t.source)),
       genreSpread: tally(tracks, (t) => t.genre),
       eraSpread: tally(tracks, (t) => t.releaseDate ? `${t.releaseDate.slice(0, 3)}0s` : undefined),

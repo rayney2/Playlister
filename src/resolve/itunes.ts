@@ -19,7 +19,21 @@ import type { MergedCandidate, ResolvedTrack } from '../lib/types.ts';
  * in the CN storefront.
  */
 const SEARCH_STOREFRONT = 'US';
-const ITUNES_RATE_LIMIT_MS = 350; // ~20 req/min is the documented soft cap
+
+/**
+ * Pacing between iTunes calls.
+ *
+ * 350ms was far too fast. Running ~170 requests/minute against this API earned a
+ * rolling 403 block that persisted for many minutes, and because 403 was treated
+ * as a permanent answer, every throttled track was being recorded as "not on
+ * Apple Music". That is a cache-poisoning bug, not a slow-down.
+ *
+ * iTunes documents roughly 20 requests/minute. 3s keeps us just under it.
+ */
+const ITUNES_RATE_LIMIT_MS = 3000;
+
+/** iTunes answers 403 when throttling, so it must be retried, not believed. */
+const ITUNES_RETRY = { retryStatuses: [403], tries: 5, backoffMs: 4000 };
 
 interface ItunesResult {
   trackId: number;
@@ -60,7 +74,7 @@ export function scoreMatch(c: MergedCandidate, r: ItunesResult): 'exact' | 'fuzz
 async function searchByText(c: MergedCandidate) {
   const term = encodeURIComponent(`${c.artist} ${c.title}`);
   const url = `https://itunes.apple.com/search?term=${term}&entity=song&limit=8&country=${SEARCH_STOREFRONT}`;
-  const res = await fetchJson<ItunesResponse>(url);
+  const res = await fetchJson<ItunesResponse>(url, ITUNES_RETRY);
 
   for (const method of ['exact', 'fuzzy'] as const) {
     for (const r of res.results ?? []) {
@@ -77,12 +91,8 @@ async function searchByText(c: MergedCandidate) {
 async function existsInStorefront(trackId: number, storefront: string): Promise<boolean> {
   if (storefront.toUpperCase() === SEARCH_STOREFRONT) return true;
   const url = `https://itunes.apple.com/lookup?id=${trackId}&country=${storefront.toLowerCase()}`;
-  try {
-    const res = await fetchJson<ItunesResponse>(url);
-    return (res.resultCount ?? 0) > 0;
-  } catch {
-    return false; // treat an unverifiable track as unavailable rather than risk a dead entry
-  }
+  const res = await fetchJson<ItunesResponse>(url, ITUNES_RETRY);
+  return (res.resultCount ?? 0) > 0;
 }
 
 /**
@@ -116,6 +126,7 @@ export async function resolveTracks(
 ): Promise<ResolveReport> {
   const resolved: ResolvedTrack[] = [];
   const unmatched: MergedCandidate[] = [];
+  const errored: MergedCandidate[] = [];
   const unavailable: ResolvedTrack[] = [];
 
   for (const c of candidates) {
@@ -132,16 +143,26 @@ export async function resolveTracks(
     try {
       hit = await searchByText(c);
     } catch {
-      hit = null;
+      // The search itself failed, so we learned nothing about this track.
+      errored.push(c);
+      await sleep(ITUNES_RATE_LIMIT_MS);
+      continue;
     }
     await sleep(ITUNES_RATE_LIMIT_MS);
 
     if (!hit) {
-      unmatched.push(c);
+      unmatched.push(c); // a real 200 with no match: Apple does not have it
       continue;
     }
 
-    const available = await existsInStorefront(hit.result.trackId, storefront);
+    let available: boolean;
+    try {
+      available = await existsInStorefront(hit.result.trackId, storefront);
+    } catch {
+      errored.push(c);
+      await sleep(ITUNES_RATE_LIMIT_MS);
+      continue;
+    }
     await sleep(ITUNES_RATE_LIMIT_MS);
 
     const track: ResolvedTrack = {
@@ -164,5 +185,5 @@ export async function resolveTracks(
     (available ? resolved : unavailable).push(track);
   }
 
-  return { resolved, unmatched, unavailable };
+  return { resolved, unmatched, errored, unavailable };
 }

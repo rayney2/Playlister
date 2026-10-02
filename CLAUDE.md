@@ -9,6 +9,9 @@ listening guide. Triggered by Siri on iPhone.
 - **Backend**: TypeScript, targeting Cloudflare Workers (free tier). Written
   dependency-free so modules run unchanged under Node and in a Worker.
 - **Local runner**: Node 24, which executes TypeScript natively. No build step.
+  This is *strip-only* mode: types are erased, nothing is generated. So no `enum`,
+  no decorators, and no constructor parameter properties
+  (`constructor(public readonly x: T)`) — declare the field and assign it.
 - **Client**: an iOS Shortcut. No Xcode project.
 
 ## Commands

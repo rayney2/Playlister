@@ -50,6 +50,8 @@ if (!queue.length) {
   }));
 
   const t0 = Date.now();
+  const mins = Math.ceil((queue.length * 6) / 60);
+  console.log(`At ~3s per call this will take roughly ${mins} minutes. Progress saves as it goes.\n`);
   const report = await resolveTracks(candidates, storefront);
   const now = new Date().toISOString();
 
@@ -58,7 +60,13 @@ if (!queue.length) {
   const { trackKey } = await import('./lib/normalize.ts');
   const hit = new Map(report.resolved.map((t) => [trackKey(t.artist, t.title), t]));
 
-  let found = 0, missing = 0;
+  // Only tracks we actually learned something about get cached. Throttled and
+  // failed lookups are left absent from the cache so a later run retries them -
+  // caching those as "not on Apple Music" was the bug that made an earlier run
+  // worthless.
+  const erroredKeys = new Set(report.errored.map((c) => trackKey(c.artist, c.title)));
+
+  let found = 0, missing = 0, skipped = 0;
   for (const k of queue) {
     const t = hit.get(k);
     if (t) {
@@ -71,16 +79,21 @@ if (!queue.length) {
         checkedAt: now,
       };
       found++;
+    } else if (erroredKeys.has(k)) {
+      skipped++; // deliberately NOT cached
     } else {
-      // Store the miss, or we re-check it on every future run.
-      cache[k] = { apple: null, checkedAt: now };
+      cache[k] = { apple: null, checkedAt: now }; // genuinely absent
       missing++;
     }
   }
 
   await saveCache(cache);
   const secs = ((Date.now() - t0) / 1000).toFixed(0);
-  console.log(`\nResolved ${found} · absent ${missing} · ${secs}s`);
+  console.log(`\nFound ${found} · genuinely absent ${missing} · could not check ${skipped} (will retry) · ${secs}s`);
+  if (skipped > found) {
+    console.log('\nMost lookups failed rather than returned an answer — iTunes is');
+    console.log('throttling. Wait a while before running again.');
+  }
 }
 
 const playable = playableKeys(cache);

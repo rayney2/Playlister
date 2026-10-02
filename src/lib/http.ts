@@ -8,12 +8,28 @@ const UA = 'Playlister/0.1 (personal music discovery; contact via github)';
 // without this header, 0 with it.
 const ACCEPT_LANGUAGE = 'en-US,en;q=0.9';
 
+export interface RetryOptions {
+  tries?: number;
+  /**
+   * Extra status codes to treat as transient. iTunes answers 403 when it is
+   * throttling, not when access is genuinely forbidden, so the resolver passes
+   * [403] here. Other APIs mean 403 literally (Spotify's playlist endpoints), so
+   * this is opt-in rather than global.
+   */
+  retryStatuses?: number[];
+  /** Base backoff. Throttle penalties need far longer waits than a 502 does. */
+  backoffMs?: number;
+}
+
 /** fetch with retry on transient failures. KEXP 502s under load. */
 export async function fetchWithRetry(
   url: string,
   init: RequestInit = {},
-  tries = 4,
+  opts: RetryOptions = {},
 ): Promise<Response> {
+  const tries = opts.tries ?? 4;
+  const extra = new Set(opts.retryStatuses ?? []);
+  const backoff = opts.backoffMs ?? 1200;
   let lastErr: unknown;
   for (let i = 0; i < tries; i++) {
     try {
@@ -21,21 +37,36 @@ export async function fetchWithRetry(
         ...init,
         headers: { 'User-Agent': UA, 'Accept-Language': ACCEPT_LANGUAGE, ...(init.headers ?? {}) },
       });
-      // Retry server errors and rate limits; 4xx (except 429) won't improve.
-      if (res.status >= 500 || res.status === 429) {
-        throw new Error(`HTTP ${res.status}`);
+      if (res.status >= 500 || res.status === 429 || extra.has(res.status)) {
+        throw new ThrottledError(res.status);
       }
       return res;
     } catch (err) {
       lastErr = err;
-      if (i < tries - 1) await sleep(1200 * (i + 1));
+      // Exponential, because a throttle window does not clear on a fixed schedule.
+      if (i < tries - 1) await sleep(backoff * Math.pow(2, i));
     }
   }
   throw new Error(`fetch failed after ${tries} tries: ${url} (${lastErr})`);
 }
 
-export async function fetchJson<T>(url: string): Promise<T> {
-  const res = await fetchWithRetry(url);
+/** Distinguishes "the service pushed back" from "the data is not there". */
+export class ThrottledError extends Error {
+  // Declared explicitly rather than as a constructor parameter property: Node's
+  // strip-only TypeScript mode removes types but cannot GENERATE the assignment a
+  // parameter property implies, so `constructor(public readonly status: number)`
+  // is a syntax error here. Same reason enums and decorators are unavailable.
+  readonly status: number;
+
+  constructor(status: number) {
+    super(`HTTP ${status} (transient)`);
+    this.name = 'ThrottledError';
+    this.status = status;
+  }
+}
+
+export async function fetchJson<T>(url: string, opts?: RetryOptions): Promise<T> {
+  const res = await fetchWithRetry(url, {}, opts);
   if (!res.ok) throw new Error(`HTTP ${res.status} for ${url}`);
   return (await res.json()) as T;
 }

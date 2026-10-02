@@ -380,3 +380,55 @@ overlapping playlist communities, which makes the same pairs recur. Searching
 "krautrock" and "cumbia" harvests disjoint communities that never reinforce each
 other. A synonym-cluster vocabulary should densify the map far more per request
 than a broader one.
+
+## iTunes throttling, and a cache-poisoning bug (2026-10-02)
+
+A run resolving 1,934 map tracks was killed after 30 minutes. It was about to write
+a cache that would have been actively harmful.
+
+**What happened.** The resolver paced calls at 350ms — roughly 170 requests a
+minute against an API documented at about 20. iTunes responded with a **rolling
+HTTP 403 block**. `fetchWithRetry` treated 403 as permanent (only 5xx and 429 were
+retried), so every throttled lookup threw, and `resolveTracks` recorded the
+candidate as having no Apple Music match.
+
+**Why that is worse than a slow run.** Those negatives were about to be written to
+`data/resolved.json` as permanent answers, with the explicit design goal of never
+re-checking them. The map would have been left believing thousands of available
+tracks do not exist — invisibly, and for good.
+
+**The block is stateful.** Measured after killing the run, with the penalty active:
+
+| gap between calls | succeeded |
+|---|---|
+| 0.3s | 3 of 5 |
+| 1s | 1 of 5 |
+| 2s | 2 of 5 |
+| 3s | 3 of 5 |
+
+No clean relationship, because the limiter was still punishing earlier behaviour.
+The real sustainable rate can't be measured from inside a penalty window.
+
+### Fixes
+
+1. **403 is now retried for iTunes specifically**, with exponential backoff from 4s.
+   It is opt-in per call site (`retryStatuses: [403]`) because other APIs mean 403
+   literally — Spotify's playlist endpoints genuinely forbid access.
+2. **Pacing raised from 350ms to 3s**, just under the documented ~20/minute.
+3. **`ResolveReport` now separates `errored` from `unmatched`.** `unmatched` means a
+   successful search returned no match — a real answer, safe to cache. `errored`
+   means we never got an answer. Only `unmatched` is cached as a negative.
+4. A regression test pins the distinction, with `TODO(human)` cases for once the
+   resolver has an injectable fetcher.
+
+**Cost of fix 2:** resolving 1,934 connected tracks now takes about 3 hours rather
+than 11 minutes. That is the real price of this API, and it is the strongest
+argument yet for ADR-008 — this work belongs in a scheduled job that runs
+unattended, not anywhere near a request.
+
+### Also found
+
+Node's strip-only TypeScript mode cannot compile constructor parameter properties
+(`constructor(public readonly status: number)`) because it erases types without
+generating code. Enums and decorators are out for the same reason. Noted in
+CLAUDE.md.
