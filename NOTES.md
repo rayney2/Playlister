@@ -432,3 +432,68 @@ Node's strip-only TypeScript mode cannot compile constructor parameter propertie
 (`constructor(public readonly status: number)`) because it erases types without
 generating code. Enums and decorators are out for the same reason. Noted in
 CLAUDE.md.
+
+## The map is genre islands, and bridges are what cross them (2026-10-02)
+
+Measured on the 527-playlist map: **132 connected components.** 97 of them have
+fewer than 5 tracks. The large ones map almost exactly onto search terms:
+
+| size | dominant terms |
+|---|---|
+| 281 | ethio jazz (281), highlife (17), desert blues (12) |
+| 267 | post punk (118), no wave (103), boogie funk (58) |
+| 224 | city pop (174), boogie funk (56) |
+| 201 | new age ambient (129), spiritual jazz (75) |
+| 156 | desert blues (156) |
+| 117 | northern soul (117) |
+
+Components **merge** when playlist communities overlap — post punk with no wave,
+city pop with boogie funk, new age with spiritual jazz. They stay **islands** when
+communities don't: ethio jazz is 281 tracks with almost no outside connection.
+
+**941 tracks carry two or more search terms; 305 of those are connected.** Those
+dual-tagged tracks are the only crossings between clusters.
+
+### The pivot bug this exposed
+
+The first pivot implementation required a pivot destination *not* to carry the
+current genre — reasoning that a genuine pivot should leave the neighbourhood. That
+excluded every actual bridge, because bridges are by definition tagged with both
+genres. Result: pivots were either impossible or cosmetic (the walk announced a
+pivot into "boogie funk" and then continued in city pop, because the destination
+carried both terms and the walk compared against all of them).
+
+Two fixes, both needed:
+
+1. **Track a single active genre**, not every term on the current node. Otherwise a
+   dual-tagged track lets the walk claim to move while staying put.
+2. **Allow bridges as pivot destinations.** What makes a pivot real is that
+   `currentGenre` switches afterwards, so later hops are judged against the new
+   genre — not that the destination lacks the old one.
+
+Working output, seeded in post punk:
+
+```
+The Cure — Jumping Someone Else's Train
+  -> The B-52's — Rock Lobster
+  -> Television — Marquee Moon
+  -> Echo and the Bunnymen — A Promise
+  -> PIVOT into no wave: OMD — Electricity
+  -> Lizzy Mercier Descloux — Fire
+  -> Bush Tetras — Can't Be Funky
+  -> James Chance & The Contortions — Super Bad
+  -> Von Lmo — Future Language
+  -> The Contortions — Contort Yourself
+```
+
+UK post-punk into synth into New York no wave, mixing famous names with genuinely
+obscure ones.
+
+### Remaining: chain length varies with component size
+
+Seeded in spiritual jazz, the walk managed only 3 steps (Don Cherry → Gato Barbieri
+→ Sun Ra) because that part of the graph is small. Seeded in post punk or city pop
+it reaches 10 comfortably. Options: harvest synonym terms to grow the thin clusters,
+or add Last.fm `artist.getSimilar` as a fallback edge so the walk can cross between
+components where no co-occurrence bridge exists — which is what ADR-010 specified
+and is now clearly necessary rather than merely nice.

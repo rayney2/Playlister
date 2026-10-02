@@ -33,6 +33,8 @@ export interface ChainOptions {
   maxGenres: number;
   /** Only walk to tracks in this set. Used to keep chains playable. */
   playable?: Set<string>;
+  /** Start in a particular genre rather than wherever the map is densest. */
+  seedTerm?: string;
 }
 
 function termsOf(map: MusicMap, key: string): string[] {
@@ -50,10 +52,14 @@ export function pickSeed(
   adj: Map<string, MapEdge[]>,
   playable?: Set<string>,
   rng = Math.random,
+  seedTerm?: string,
 ): string | undefined {
   const candidates = Object.values(map.nodes)
     .filter((n) => {
       if (playable && !playable.has(n.key)) return false;
+      // Without this the walk always starts in the densest cluster, because that
+      // is where the highest-degree nodes are.
+      if (seedTerm && !n.terms.includes(seedTerm)) return false;
       const degree = adj.get(n.key)?.length ?? 0;
       return degree >= 3 && n.playlists >= 2 && n.playlists <= 8;
     })
@@ -70,7 +76,7 @@ export function walk(
   rng = Math.random,
 ): ChainStep[] {
   const adj = buildAdjacency(map);
-  const start = seedKey ?? pickSeed(map, adj, opts.playable, rng);
+  const start = seedKey ?? pickSeed(map, adj, opts.playable, rng, opts.seedTerm);
   if (!start || !map.nodes[start]) return [];
 
   const visitedTracks = new Set<string>([start]);
@@ -87,9 +93,18 @@ export function walk(
 
   let current = start;
   let hopsInCurrentGenre = 1;
+  /**
+   * The ONE term the walk currently considers itself to be in.
+   *
+   * An earlier version compared against every term on the current node, which made
+   * pivots cosmetic: a track tagged both "city pop" and "boogie funk" let the walk
+   * announce a pivot and then carry straight on in city pop, because city pop was
+   * still among the current node's terms. Tracking a single active genre is what
+   * makes a pivot actually move.
+   */
+  let currentGenre = termsOf(map, start)[0];
 
   while (chain.length < opts.length) {
-    const currentTerms = termsOf(map, current);
 
     const options = (adj.get(current) ?? [])
       .map((e) => ({ e, next: e.a === current ? e.b : e.a }))
@@ -103,13 +118,26 @@ export function walk(
       });
     if (!options.length) break;
 
-    const shares = ({ next }: { next: string }) =>
-      termsOf(map, next).some((t) => currentTerms.includes(t));
+    const shares = ({ next }: { next: string }) => termsOf(map, next).includes(currentGenre);
 
     // A pivot introduces a genre term we haven't used, and is only allowed once
     // we've spent enough hops here and haven't hit the genre ceiling.
     const canPivot = hopsInCurrentGenre >= opts.hopsPerGenre && genresUsed.size < opts.maxGenres;
-    const pivots = options.filter((o) => termsOf(map, o.next).some((t) => !genresUsed.has(t)));
+    /**
+     * A pivot destination is a BRIDGE: a track carrying a genre term we have not
+     * used yet.
+     *
+     * An earlier version also required the destination not to carry the current
+     * genre, reasoning that a real pivot should leave. That excluded every actual
+     * bridge — measured, 305 of the map's connected tracks carry two or more terms,
+     * and those dual-tagged tracks are the only crossings between genre clusters.
+     * The graph has 132 components; without bridges a walk can never leave the one
+     * it started in.
+     *
+     * What makes the pivot real is not the destination, it is that `currentGenre`
+     * switches afterwards, so every subsequent hop is judged against the new genre.
+     */
+    const pivots = options.filter((o) => termsOf(map, o.next).some((x) => !genresUsed.has(x)));
     const stays = options.filter(shares);
 
     let chosen: typeof options[number];
@@ -125,7 +153,7 @@ export function walk(
 
     const next = chosen.next;
     const nextTerms = termsOf(map, next);
-    const shared = nextTerms.filter((t) => currentTerms.includes(t));
+    const shared = nextTerms.includes(currentGenre) ? [currentGenre] : [];
     const newTerms = nextTerms.filter((t) => !genresUsed.has(t));
 
     chain.push({
@@ -142,8 +170,9 @@ export function walk(
 
     visitedTracks.add(next);
     visitedArtists.add(norm(map.nodes[next].artist));
-    if (isPivot) {
-      for (const t of newTerms.slice(0, 1)) genresUsed.add(t);
+    if (isPivot && newTerms.length) {
+      currentGenre = newTerms[0];
+      genresUsed.add(currentGenre);
       hopsInCurrentGenre = 1;
     } else {
       hopsInCurrentGenre++;

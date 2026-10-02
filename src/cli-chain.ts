@@ -32,6 +32,7 @@ const chain = walk(map, {
   hopsPerGenre: Number(arg('hops-per-genre', '4')),
   maxGenres: Number(arg('max-genres', '3')),
   playable: usePlayable ? playable : undefined,
+  seedTerm: process.argv.includes('--seed-term') ? arg('seed-term', '') : undefined,
 });
 
 if (!chain.length) {
