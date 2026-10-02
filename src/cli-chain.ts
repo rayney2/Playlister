@@ -1,13 +1,10 @@
 import { readFile } from 'node:fs/promises';
 import { walk } from './map/chain.ts';
 import { buildAdjacency, type MusicMap } from './map/cooccurrence.ts';
-import { resolveTracks } from './resolve/itunes.ts';
-import type { MergedCandidate } from './lib/types.ts';
+import { loadCache, playableKeys } from './map/resolved-cache.ts';
 
-// Walks the map built by `npm run harvest` and resolves the result to Apple Music.
-//
-// Only the chosen tracks get resolved - about 15 calls instead of thousands. That
-// is the whole point of separating the offline map build from the playlist request.
+// Walks the map built by `npm run harvest`, restricted to tracks `npm run resolve`
+// has confirmed are on Apple Music. No resolution happens here, so this is fast.
 
 function arg(name: string, fallback: string): string {
   const i = process.argv.indexOf(`--${name}`);
@@ -16,39 +13,43 @@ function arg(name: string, fallback: string): string {
 
 const map = JSON.parse(await readFile(new URL('../data/map.json', import.meta.url), 'utf8')) as MusicMap;
 const adj = buildAdjacency(map);
-const length = Number(arg('length', '12'));
+const cache = await loadCache();
+const playable = playableKeys(cache);
+const usePlayable = !process.argv.includes('--any');
 
-console.log(`Map: ${map.stats.uniqueTracks.toLocaleString()} tracks, ${map.stats.keptEdges.toLocaleString()} edges, built ${map.builtAt.slice(0, 16)}`);
-const degrees = [...adj.values()].map((l) => l.length);
-console.log(`Connectivity: ${adj.size} tracks have at least one edge, max degree ${Math.max(...degrees, 0)}\n`);
+const connected = adj.size;
+const connectedPlayable = [...adj.keys()].filter((k) => playable.has(k)).length;
+console.log(`Map: ${map.stats.uniqueTracks.toLocaleString()} tracks · ${map.stats.keptEdges.toLocaleString()} edges · ${connected.toLocaleString()} connected`);
+console.log(`Confirmed playable among connected: ${connectedPlayable.toLocaleString()}`);
+if (usePlayable && connectedPlayable < 20) {
+  console.log('\nToo few confirmed-playable tracks to walk. Run `npm run resolve` first,');
+  console.log('or pass --any to walk unresolved tracks (chain may contain unplayable picks).');
+  process.exit(0);
+}
 
-const chain = walk(map, { length, requireSharedTerm: true });
-if (!chain.length) { console.log('Walk produced nothing — map too sparse. Harvest more terms.'); process.exit(0); }
-
-console.log(`Chain (${chain.length} steps)\n`);
-chain.forEach((s, i) => {
-  console.log(`${String(i + 1).padStart(2)}. ${s.node.artist} — ${s.node.title}`);
-  console.log(`    terms: ${s.node.terms.join(', ')}`);
-  if (i > 0) console.log(`    link: ${s.reason}  [pmi ${s.pmi.toFixed(1)}]`);
+const chain = walk(map, {
+  length: Number(arg('length', '12')),
+  hopsPerGenre: Number(arg('hops-per-genre', '4')),
+  maxGenres: Number(arg('max-genres', '3')),
+  playable: usePlayable ? playable : undefined,
 });
 
-// Resolve only the chain, not the pool.
-console.log('\nResolving to Apple Music...');
-const candidates: MergedCandidate[] = chain.map((s) => ({
-  artist: s.node.artist,
-  title: s.node.title,
-  source: 'music_map',
-  confidence: 1,
-  blurb: s.reason,
-  endorsements: [{ source: 'music_map', blurb: s.reason }],
-}));
-const report = await resolveTracks(candidates, arg('storefront', 'us'));
+if (!chain.length) {
+  console.log('\nWalk produced nothing — no suitable seed. Harvest more playlists.');
+  process.exit(0);
+}
 
-console.log(`\nPlayable (${report.resolved.length}/${chain.length}):\n`);
-for (const t of report.resolved) {
-  console.log(`  ${t.appleArtist} — ${t.appleTitle}`);
-  console.log(`     ${t.genre ?? '?'} · ${(t.releaseDate ?? '').slice(0, 4)}`);
-}
-if (report.unmatched.length) {
-  console.log(`\nNot on Apple Music (${report.unmatched.length}): ${report.unmatched.map((u) => u.artist).join(', ')}`);
-}
+const genres = new Set(chain.flatMap((s) => s.node.terms));
+console.log(`\nChain: ${chain.length} steps · ${chain.filter((s) => s.isPivot).length} pivots · terms touched: ${[...genres].join(', ')}\n`);
+
+chain.forEach((s, i) => {
+  const entry = cache[s.node.key]?.apple;
+  const name = entry ? `${entry.artist} — ${entry.title}` : `${s.node.artist} — ${s.node.title}`;
+  const meta = entry ? `${entry.genre ?? '?'} · ${(entry.releaseDate ?? '').slice(0, 4)}` : 'unresolved';
+  console.log(`${String(i + 1).padStart(2)}. ${name}`);
+  console.log(`    ${meta}`);
+  if (i > 0) console.log(`    ${s.isPivot ? 'PIVOT: ' : 'link: '}${s.reason}  [pmi ${s.pmi.toFixed(1)}]`);
+});
+
+console.log('\nThese hop reasons are the story layer\'s spine — each one is a human-made');
+console.log('connection we can cite rather than a similarity score we have to explain.');

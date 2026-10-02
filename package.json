@@ -13,6 +13,7 @@
     "test:watch": "node --experimental-strip-types --test --watch",
     "verify:keys": "node --env-file=.env --experimental-strip-types src/verify-keys.ts",
     "harvest": "node --env-file=.env --experimental-strip-types src/cli-harvest.ts",
-    "chain": "node --env-file=.env --experimental-strip-types src/cli-chain.ts"
+    "chain": "node --env-file=.env --experimental-strip-types src/cli-chain.ts",
+    "resolve": "node --env-file=.env --experimental-strip-types src/cli-resolve.ts"
   }
 }
