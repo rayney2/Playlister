@@ -342,3 +342,41 @@ groupings. The idea is sound.
   the highest PMI of anything (an artist's own songs rarely sit beside strangers'),
   but the walk forbids repeating an artist, so they can never be taken. Now filtered
   at both build and load time.
+
+## Dense harvest, 527 playlists (2026-10-02)
+
+Re-harvested at 30 playlists per term instead of 10.
+
+| | 10/term | 30/term |
+|---|---|---|
+| playlists | 180 | **527** |
+| track instances | 11,209 | **31,214** |
+| unique tracks | 9,236 | **22,366** |
+| candidate pairs | 40,730 | **108,037** |
+| edges kept | 1,626 | **5,304** |
+| **tracks with an edge** | 587 (6%) | **1,934 (9%)** |
+| max degree | 14 | **28** |
+| viable seeds (degree 3+) | — | **1,414** |
+| build time | 266s | **3,614s** |
+
+Connectivity roughly tripled, which is the number that matters — the walk can only
+move through connected tracks. But it is still only 9%.
+
+**Timing correction:** I estimated ~13 minutes and it took 60. The per-request
+pacing (220ms between playlist fetches) dominates, so build time scales linearly
+with playlist count, not with anything cleverer. Budget about 7 seconds per
+playlist harvested.
+
+### Why connectivity stays low, and what would actually fix it
+
+An edge requires a *pair* to appear in two or more playlists. Tracks recur across
+playlists readily; specific pairs do not. Tripling playlists per term tripled
+connectivity, so volume works — but there is a ceiling, because Deezer returns at
+most ~50 playlists per query and we reject the oversized ones.
+
+So the lever is **more terms covering the same scene**, not more distinct genres.
+Searching "krautrock", "kosmische", "berlin school" and "motorik" harvests
+overlapping playlist communities, which makes the same pairs recur. Searching
+"krautrock" and "cumbia" harvests disjoint communities that never reinforce each
+other. A synonym-cluster vocabulary should densify the map far more per request
+than a broader one.
