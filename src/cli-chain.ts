@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { walk } from './map/chain.ts';
 import { buildAdjacency, type MusicMap } from './map/cooccurrence.ts';
 import { loadCache, playableKeys } from './map/resolved-cache.ts';
+import { loadSimilar } from './map/similar-artists.ts';
 
 // Walks the map built by `npm run harvest`, restricted to tracks `npm run resolve`
 // has confirmed are on Apple Music. No resolution happens here, so this is fast.
@@ -27,13 +28,22 @@ if (usePlayable && connectedPlayable < 20) {
   process.exit(0);
 }
 
+const similar = process.argv.includes('--no-similar') ? undefined : await loadSimilar();
+if (similar) console.log(`Similar-artist index: ${Object.keys(similar).length.toLocaleString()} artists`);
+
+// A fixed seed makes A/B comparisons meaningful; without it every run starts
+// somewhere different and flag effects are indistinguishable from seed luck.
+const deterministic = process.argv.includes('--deterministic');
+const rng = deterministic ? () => 0 : Math.random;
+
 const chain = walk(map, {
   length: Number(arg('length', '12')),
   hopsPerGenre: Number(arg('hops-per-genre', '4')),
   maxGenres: Number(arg('max-genres', '3')),
   playable: usePlayable ? playable : undefined,
   seedTerm: process.argv.includes('--seed-term') ? arg('seed-term', '') : undefined,
-});
+  similar,
+}, undefined, rng);
 
 if (!chain.length) {
   console.log('\nWalk produced nothing — no suitable seed. Harvest more playlists.');
@@ -41,7 +51,8 @@ if (!chain.length) {
 }
 
 const genres = new Set(chain.flatMap((s) => s.node.terms));
-console.log(`\nChain: ${chain.length} steps · ${chain.filter((s) => s.isPivot).length} pivots · terms touched: ${[...genres].join(', ')}\n`);
+const bridges = chain.filter((s) => s.via === 'similar-artist').length;
+console.log(`\nChain: ${chain.length} steps · ${chain.filter((s) => s.isPivot).length} pivots · ${bridges} similarity bridges · terms: ${[...genres].join(', ')}\n`);
 
 chain.forEach((s, i) => {
   const entry = cache[s.node.key]?.apple;
@@ -49,7 +60,11 @@ chain.forEach((s, i) => {
   const meta = entry ? `${entry.genre ?? '?'} · ${(entry.releaseDate ?? '').slice(0, 4)}` : 'unresolved';
   console.log(`${String(i + 1).padStart(2)}. ${name}`);
   console.log(`    ${meta}`);
-  if (i > 0) console.log(`    ${s.isPivot ? 'PIVOT: ' : 'link: '}${s.reason}  [pmi ${s.pmi.toFixed(1)}]`);
+  if (i > 0) {
+    const tag = s.via === 'similar-artist' ? 'BRIDGE' : s.isPivot ? 'PIVOT ' : 'link  ';
+    const score = s.via === 'similar-artist' ? '' : `  [pmi ${s.pmi.toFixed(1)}]`;
+    console.log(`    ${tag}: ${s.reason}${score}`);
+  }
 });
 
 console.log('\nThese hop reasons are the story layer\'s spine — each one is a human-made');

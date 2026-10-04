@@ -14,6 +14,7 @@
     "verify:keys": "node --env-file=.env --experimental-strip-types src/verify-keys.ts",
     "harvest": "node --env-file=.env --experimental-strip-types src/cli-harvest.ts",
     "chain": "node --env-file=.env --experimental-strip-types src/cli-chain.ts",
-    "resolve": "node --env-file=.env --experimental-strip-types src/cli-resolve.ts"
+    "resolve": "node --env-file=.env --experimental-strip-types src/cli-resolve.ts",
+    "similar": "node --env-file=.env --experimental-strip-types src/cli-similar.ts"
   }
 }

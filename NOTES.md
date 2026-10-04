@@ -497,3 +497,123 @@ it reaches 10 comfortably. Options: harvest synonym terms to grow the thin clust
 or add Last.fm `artist.getSimilar` as a fallback edge so the walk can cross between
 components where no co-occurrence bridge exists — which is what ADR-010 specified
 and is now clearly necessary rather than merely nice.
+
+## Speed: 54x faster, and the hour was pathological (2026-10-04)
+
+The 527-playlist harvest took 60 minutes — about 7s per playlist. Measured the
+actual costs:
+
+| | |
+|---|---|
+| Deezer playlist fetch, single | **656ms** average |
+| 8 requests at concurrency 1 | 564ms each |
+| 8 requests at concurrency 4 | **250ms** each |
+| 8 requests at concurrency 8 | **165ms** each |
+| rejections at concurrency 8 | **none** (8/8 returned 200) |
+
+So latency was never the constraint; the serial loop was. With `mapLimit` at
+concurrency 8, a 3-term 84-playlist harvest ran in **10.9s — 0.13s per playlist**,
+against 7s before. The full 51-term harvest now takes **~160s instead of 60
+minutes**.
+
+The original 7s/playlist cannot be explained by latency (0.66s) plus the old sleep
+(0.22s). Most likely retry backoff compounding under sustained serial load. Per-term
+timing is now printed so this is visible rather than inferred.
+
+**iTunes is the exception.** Its ~20/minute cap is a hard server-side limit, so
+concurrency cannot help there. Resolution stays slow and belongs in a scheduled job.
+
+## Option 1: synonym term clusters (2026-10-04)
+
+Replaced one-term-per-genre with 51 terms in 16 synonym clusters ("krautrock,
+kosmische, berlin school, motorik" rather than just "krautrock").
+
+| | single-term | synonym clusters |
+|---|---|---|
+| playlists | 527 | **1,422** |
+| unique tracks | 22,366 | **52,685** |
+| edges | 5,304 | **15,051** |
+| connected tracks | 1,934 | **4,787** |
+| components | 132 | 278 |
+| **largest component** | 281 | **1,573** |
+| connected bridge tracks | 305 | **2,309** |
+
+The largest component now spans scenes rather than sitting inside one: disco funk +
+mod soul + 80s boogie + italo disco. The second pairs japanese funk and city pop
+with astral and spiritual jazz.
+
+Two terms returned nothing usable: "showa boogie" (0 playlists) and "brazilian
+psych" (6). Dead terms are harmless but worth pruning.
+
+## Playlist selection, and the Britney problem
+
+Selection was: Deezer's relevance ranking for the term, filtered only by size
+(8–200 tracks), first 30 kept. No other quality signal.
+
+That let generic pop playlists in under specific terms, and the map learned
+nonsense. A walk seeded in "post punk" produced **The Bangles, Meghan Trainor,
+Britney Spears, OneRepublic, Dua Lipa**.
+
+**Fix: the title must contain the search term as a phrase**, compared with spacing
+and punctuation stripped. Word-level matching was too loose — "Pop Punk Essentials"
+matched "post punk" on *punk*, and "Bedroom Pop" matched "dream pop" on *pop*.
+Flattening both sides keeps "Post-Punk Essentials" and "Dreampop" while rejecting
+those two.
+
+Cost: 1,422 → 966 playlists, 4,787 → 3,618 connected. Recall traded for precision,
+which is right when 36 playlists per term are available and only 30 are wanted.
+
+### A second bug the Britney chain exposed
+
+The walk fell back to the strongest edge *regardless of genre* when nothing shared
+the current term. One genre-less hop into a generic pop cluster and every later hop
+was judged against pop. Preference order is now: stay in genre → pivot if the budget
+allows → hop to something connected to a genre already used → **stop**. A short
+honest chain beats a long incoherent one; post punk now stops at 5 rather than
+wandering.
+
+After both fixes, seeded in krautrock:
+
+```
+Michael Rother -> Harmonia -> Ashra -> Peter Baumann
+  -> PIVOT into berlin school: Klaus Schulze
+  -> Neuronium -> Michael Garrison -> You -> Robert Schroeder -> Serge Blenner
+```
+
+That is the actual historical lineage from Neu!-adjacent krautrock into Berlin
+School.
+
+## Option 2: Last.fm similar-artist bridges (2026-10-04)
+
+Built an artist-similarity index for artists of connected tracks: **2,138 artists in
+265s, 2,123 of them with similar artists (99%)**. Used only when co-occurrence is
+exhausted, and labelled `BRIDGE` in output so the story never claims a human
+sequenced two tracks when none did.
+
+**Two bugs found while testing it:**
+
+1. **The bridge could never fire.** A `break` ran when co-occurrence options were
+   exhausted — precisely the condition the bridge exists for — before the fallback
+   was reached. Measured 0 uses across every seed until this was fixed.
+2. **A/B testing was meaningless** because the seed is chosen randomly each run, so
+   flag effects were indistinguishable from seed luck ("tropicalia" gave 6 steps
+   without the flag and 3 with, purely from different seeds). Added
+   `--deterministic`.
+
+With both fixed, comparing identical seeds:
+
+| seed | co-occurrence only | with bridges |
+|---|---|---|
+| nugaze | 11 steps | **12 steps, 1 bridge** |
+| tropicalia | 12 | 12, 0 bridges |
+| mpb | 12 | 12, 0 bridges |
+| space disco | 12 | 12, 0 bridges |
+
+**Verdict: it works but is now rarely needed.** Option 1 densified the map enough
+that co-occurrence usually reaches 12 steps alone. The bridge is a safety net for
+thin clusters, not a main mechanism — which is the right role for it, since
+co-occurrence is the stronger evidence.
+
+**Caveat on the scores:** Last.fm normalises so the top similar artist always has
+`match: 1.00`. It is a relative rank within one artist's list, not an absolute
+similarity, so "match 1.00" must not be presented as "these are the same thing".

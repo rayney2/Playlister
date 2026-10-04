@@ -1,4 +1,5 @@
 import { norm } from '../lib/normalize.ts';
+import type { SimilarIndex } from './similar-artists.ts';
 import type { MapEdge, MapNode, MusicMap } from './cooccurrence.ts';
 import { buildAdjacency } from './cooccurrence.ts';
 
@@ -23,6 +24,8 @@ export interface ChainStep {
   pmi: number;
   /** True when this hop deliberately changed genre neighbourhood. */
   isPivot: boolean;
+  /** How this link was established. Co-occurrence is the stronger evidence. */
+  via: 'seed' | 'cooccurrence' | 'similar-artist';
 }
 
 export interface ChainOptions {
@@ -35,6 +38,13 @@ export interface ChainOptions {
   playable?: Set<string>;
   /** Start in a particular genre rather than wherever the map is densest. */
   seedTerm?: string;
+  /**
+   * Artist-similarity fallback, used only when no co-occurrence hop exists.
+   * Co-occurrence means a person sequenced two tracks; this does not, so hops
+   * taken this way are labelled differently and the story must not claim
+   * otherwise.
+   */
+  similar?: SimilarIndex;
 }
 
 function termsOf(map: MusicMap, key: string): string[] {
@@ -69,6 +79,47 @@ export function pickSeed(
   return slice[Math.floor(rng() * slice.length)]?.key;
 }
 
+/**
+ * Find a hop by artist similarity when co-occurrence has run out.
+ *
+ * Deliberately conservative: the destination must still belong to a genre already
+ * in play, so similarity cannot be used to wander off. It exists to cross between
+ * the map's 206 components, not to loosen the walk.
+ */
+function similarHop(
+  map: MusicMap,
+  opts: ChainOptions,
+  byArtist: Map<string, string[]>,
+  current: string,
+  visitedTracks: Set<string>,
+  visitedArtists: Set<string>,
+  genresUsed: Set<string>,
+): ChainStep | undefined {
+  const index = opts.similar;
+  if (!index) return undefined;
+  const list = index[norm(map.nodes[current].artist)] ?? [];
+
+  for (const cand of [...list].sort((a, b) => b.match - a.match)) {
+    const key = norm(cand.artist);
+    if (visitedArtists.has(key)) continue;
+    for (const nodeKey of byArtist.get(key) ?? []) {
+      const n = map.nodes[nodeKey];
+      if (!n || visitedTracks.has(nodeKey)) continue;
+      if (opts.playable && !opts.playable.has(nodeKey)) continue;
+      if (!n.terms.some((t) => genresUsed.has(t))) continue;
+      return {
+        node: n,
+        reason: `no shared playlist; bridged by artist similarity (Last.fm match ${cand.match.toFixed(2)} from ${map.nodes[current].artist})`,
+        sharedTerms: n.terms.filter((t) => genresUsed.has(t)),
+        pmi: 0,
+        isPivot: false,
+        via: 'similar-artist',
+      };
+    }
+  }
+  return undefined;
+}
+
 export function walk(
   map: MusicMap,
   opts: ChainOptions,
@@ -83,12 +134,22 @@ export function walk(
   const visitedArtists = new Set<string>([norm(map.nodes[start].artist)]);
   const genresUsed = new Set<string>(termsOf(map, start).slice(0, 1));
 
+  // artist -> track keys, for the similarity fallback.
+  const byArtist = new Map<string, string[]>();
+  for (const n of Object.values(map.nodes)) {
+    const a = norm(n.artist);
+    let list = byArtist.get(a);
+    if (!list) { list = []; byArtist.set(a, list); }
+    list.push(n.key);
+  }
+
   const chain: ChainStep[] = [{
     node: map.nodes[start],
     reason: 'seed',
     sharedTerms: termsOf(map, start),
     pmi: 0,
     isPivot: false,
+    via: 'seed',
   }];
 
   let current = start;
@@ -116,7 +177,20 @@ export function walk(
         if (opts.playable && !opts.playable.has(next)) return false;
         return true;
       });
-    if (!options.length) break;
+    // When co-occurrence is exhausted, this is EXACTLY when the similarity bridge
+    // is wanted. An earlier version broke out here, before the fallback below was
+    // ever reached, so the bridge could never fire - it measured 0 uses across
+    // every seed tried.
+    if (!options.length) {
+      const bridged = similarHop(map, opts, byArtist, current, visitedTracks, visitedArtists, genresUsed);
+      if (!bridged) break;
+      chain.push(bridged);
+      visitedTracks.add(bridged.node.key);
+      visitedArtists.add(norm(bridged.node.artist));
+      hopsInCurrentGenre++;
+      current = bridged.node.key;
+      continue;
+    }
 
     const shares = ({ next }: { next: string }) => termsOf(map, next).includes(currentGenre);
 
@@ -140,15 +214,43 @@ export function walk(
     const pivots = options.filter((o) => termsOf(map, o.next).some((x) => !genresUsed.has(x)));
     const stays = options.filter(shares);
 
+    /**
+     * Preference order: stay in genre, else pivot if the budget allows, else hop
+     * to somewhere connected to a genre we have already used, else STOP.
+     *
+     * The earlier version fell back to `options[0]` - the strongest edge
+     * regardless of genre - whenever nothing shared the current term. That is how
+     * a post-punk walk ended up at Meghan Trainor and Britney Spears: one
+     * genre-less hop into a generic pop cluster and every later hop was judged
+     * against pop. A short honest chain beats a long incoherent one.
+     */
+    const relatedToSomethingUsed = options.filter((o) =>
+      termsOf(map, o.next).some((t) => genresUsed.has(t)));
+
     let chosen: typeof options[number];
     let isPivot = false;
     if (canPivot && pivots.length) {
-      chosen = pivots[0];          // adjacency is pre-sorted by pmi
+      chosen = pivots[0];
       isPivot = true;
     } else if (stays.length) {
-      chosen = stays[0];
+      chosen = stays[0];           // adjacency is pre-sorted by pmi
+    } else if (pivots.length && genresUsed.size < opts.maxGenres) {
+      chosen = pivots[0];
+      isPivot = true;
+    } else if (relatedToSomethingUsed.length) {
+      chosen = relatedToSomethingUsed[0];
+    } else if (opts.similar) {
+      // Last resort: cross to a different component via artist similarity.
+      const step = similarHop(map, opts, byArtist, current, visitedTracks, visitedArtists, genresUsed);
+      if (!step) break;
+      chain.push(step);
+      visitedTracks.add(step.node.key);
+      visitedArtists.add(norm(step.node.artist));
+      hopsInCurrentGenre++;
+      current = step.node.key;
+      continue;
     } else {
-      chosen = options[0];         // nothing shares a term; take the best link
+      break;                       // no coherent hop available
     }
 
     const next = chosen.next;
@@ -157,6 +259,7 @@ export function walk(
     const newTerms = nextTerms.filter((t) => !genresUsed.has(t));
 
     chain.push({
+      via: 'cooccurrence',
       node: map.nodes[next],
       reason: isPivot
         ? `pivot into ${newTerms.slice(0, 2).join(' / ')} — placed near "${map.nodes[current].title}" in ${chosen.e.playlists} playlists`
